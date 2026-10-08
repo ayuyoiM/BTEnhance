@@ -2,10 +2,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 using BTitles;
 using BTitlesLocalizationPatch.Scan;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.Localization;
+using Terraria.ModLoader;
 
 namespace BTitlesLocalizationPatch
 {
@@ -17,10 +19,52 @@ namespace BTitlesLocalizationPatch
             string,
             (string Text, string Tag)
         > TranslationCache = new();
+        // 群系数量有限（数百级），超限清空重建即可，无需复杂淘汰策略
+        private const int MaxCacheEntries = 2048;
         private static volatile string _lastCultureName = "";
 
+        // 样式开关缓存：UI 渲染热路径避免每次查询 ModContent.GetInstance
+        // 修改配置后最多 3 秒生效；ApplyConfigChangeStyle 会立即同步缓存
+        private static volatile bool _cachedStylingEnabled;
+        private static long _lastStylingCheckTicks;
+        private static readonly long StylingCheckCooldownTicks = TimeSpan.FromSeconds(3).Ticks;
+
+        private static bool IsStylingEnabled()
+        {
+            long now = DateTime.UtcNow.Ticks;
+            long lastTicks = Volatile.Read(ref _lastStylingCheckTicks);
+            if (now - lastTicks < StylingCheckCooldownTicks)
+                return _cachedStylingEnabled;
+
+            Volatile.Write(ref _lastStylingCheckTicks, now);
+            try
+            {
+                _cachedStylingEnabled =
+                    ModContent.GetInstance<BTitlesConfig>()?.EnableAutoStyling ?? false;
+            }
+            catch
+            {
+                _cachedStylingEnabled = false;
+            }
+            return _cachedStylingEnabled;
+        }
+
+        // 配置变更时立即同步缓存，避免 3 秒冷却期内读取到旧值
+        internal static void UpdateStylingCache(bool enabled)
+        {
+            _cachedStylingEnabled = enabled;
+            Volatile.Write(ref _lastStylingCheckTicks, DateTime.UtcNow.Ticks);
+        }
+
+        // 热重载时使缓存立即失效，下次调用重新读取配置
+        internal static void ResetStylingCache()
+        {
+            _cachedStylingEnabled = false;
+            Volatile.Write(ref _lastStylingCheckTicks, 0L);
+        }
+
         public static string GetActualTitleNamePrefixHook(
-            // orig 是 MonoMod 前缀 Hook 的原始方法引用，本 Hook 完全替换原逻辑故不使用
+            // orig 是 MonoMod 前缀 Hook 的原始方法引用，翻译链全未命中时作原生回落
             Func<BiomeTitlesUI, BiomeEntry, string> orig,
             BiomeTitlesUI self,
             BiomeEntry biomeEntry
@@ -37,7 +81,6 @@ namespace BTitlesLocalizationPatch
             string safeScope = (biomeEntry.LocalizationScope ?? "").Replace(".", "_");
             bool hasValidKey = !string.IsNullOrEmpty(sanitizedKey);
 
-            // cacheKey 仅作字典键使用，非文件路径，无非法字符风险
             string cacheKey = $"{safeScope}|{sanitizedKey}";
             string currentCulture = Language.ActiveCulture.Name;
 
@@ -56,7 +99,8 @@ namespace BTitlesLocalizationPatch
                 return displayName;
             }
 
-            if (biomeEntry.TitleColor == default && biomeEntry.Icon != null)
+            // 只有启用自动配色才运行时采样补色；关闭时保持 default（不可再被上色）
+            if (IsStylingEnabled() && biomeEntry.TitleColor == default && biomeEntry.Icon != null)
             {
                 // 热重载后 GPU 资源释放，图标引用可能已失效
                 if (biomeEntry.Icon.IsDisposed)
@@ -101,9 +145,8 @@ namespace BTitlesLocalizationPatch
             string? overridden = baseText != null ? ApplyCustomOverride(baseText, config) : null;
             if (overridden != null)
             {
-                // 基础翻译仍缓存，下次重新检查配置
                 if (hasValidKey && baseText != null)
-                    TranslationCache[cacheKey] = (baseText, baseTag ?? "Unknown");
+                    CacheEntry(cacheKey, baseText, baseTag ?? "Unknown");
                 LogBiomeEntry(biomeEntry.Key ?? "", overridden, biomeEntry, "CustomName");
                 return overridden;
             }
@@ -121,13 +164,30 @@ namespace BTitlesLocalizationPatch
                 if (match != null)
                 {
                     if (hasValidKey)
-                        TranslationCache[cacheKey] = (title, "Fallback");
+                        CacheEntry(cacheKey, title, "Fallback");
                     LogBiomeEntry(biomeEntry.Key ?? "", match.NewName, biomeEntry, "CustomName");
                     return match.NewName;
                 }
             }
 
-            // 5. 回退原始标题
+            // 5. 回退：先尝试 BTitles 原生解析（未来版本新增逻辑自动跟随），异常时回退原始标题
+            try
+            {
+                string nativeTitle = orig(self, biomeEntry);
+                if (!string.IsNullOrEmpty(nativeTitle))
+                    return LogAndCache(biomeEntry, cacheKey, hasValidKey, nativeTitle, "Fallback");
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.DebugLog.Warn(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.NativeTitleFailed",
+                        biomeEntry.Key ?? "",
+                        ex.Message
+                    )
+                );
+            }
+
             return LogAndCache(
                 biomeEntry,
                 cacheKey,
@@ -136,8 +196,6 @@ namespace BTitlesLocalizationPatch
                 "Fallback"
             );
         }
-
-        // ── 翻译链各步骤
 
         private static (string? Text, string? Tag) TryStep1(
             string sanitizedKey,
@@ -155,8 +213,8 @@ namespace BTitlesLocalizationPatch
                 if (scope == "Terraria")
                     return (localized, "BTitles");
 
-                // 非拉丁文字语言下值如果是纯 ASCII，说明模组没提供当前语言的翻译（英文回退）
-                // 跳过此步，让后续翻译链继续查找前置模组或 BTitles 的翻译
+                // 非拉丁文字语言下纯 ASCII 值说明模组没提供当前语言的译文（英文回退），
+                // 跳过此步，让后续翻译链继续查找
                 if (IsNonLatinLanguage() && IsPureAscii(localized))
                     return (null, null);
 
@@ -172,9 +230,6 @@ namespace BTitlesLocalizationPatch
             return (null, null);
         }
 
-        // ── 自定义覆盖
-
-        // BTitles 的 GeneralConfig 已有 ProjectReference，直接类型访问
         private static string? ApplyCustomOverride(string currentName, object? configObj)
         {
             if (configObj is not GeneralConfig config || config.CustomBiomeNames == null)
@@ -194,8 +249,6 @@ namespace BTitlesLocalizationPatch
             return match.NewName;
         }
 
-        // ── 日志与缓存
-
         private static string LogAndCache(
             BiomeEntry entry,
             string cacheKey,
@@ -205,9 +258,16 @@ namespace BTitlesLocalizationPatch
         )
         {
             if (hasValidKey && !string.IsNullOrEmpty(text))
-                TranslationCache[cacheKey] = (text, tag);
+                CacheEntry(cacheKey, text, tag);
             LogBiomeEntry(entry.Key ?? "", text, entry, tag);
             return text;
+        }
+
+        private static void CacheEntry(string cacheKey, string text, string tag)
+        {
+            if (TranslationCache.Count >= MaxCacheEntries)
+                TranslationCache.Clear();
+            TranslationCache[cacheKey] = (text, tag);
         }
 
         private static void LogBiomeEntry(string key, string text, BiomeEntry entry, string tag)
@@ -249,8 +309,6 @@ namespace BTitlesLocalizationPatch
             );
         }
 
-        // ── 本地化辅助
-
         private static string? TryLocalized(string locKey)
         {
             if (Language.Exists(locKey))
@@ -262,14 +320,18 @@ namespace BTitlesLocalizationPatch
             return null;
         }
 
-        // 目前覆盖：中文、日文、韩文、俄文
+        // 非拉丁文字语言：tModLoader 仅中/俄两种，模组可能未提供译文而回退英文
+        private static readonly string[] NonLatinLanguagePrefixes = ["zh-", "ru"];
+
         private static bool IsNonLatinLanguage()
         {
             string name = Language.ActiveCulture.Name;
-            return name.StartsWith("zh-")
-                || name.StartsWith("ja")
-                || name.StartsWith("ko")
-                || name.StartsWith("ru");
+            foreach (string prefix in NonLatinLanguagePrefixes)
+            {
+                if (name.StartsWith(prefix))
+                    return true;
+            }
+            return false;
         }
 
         private static Texture2D? TryReloadIcon(string? biomeKey)

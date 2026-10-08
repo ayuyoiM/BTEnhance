@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -21,7 +22,10 @@ namespace BTitlesLocalizationPatch.Scan
         // 扫描前 BiomeDictionary 的快照，用于区分新增和已有条目（回滚、热卸载）
         internal static HashSet<string>? PreScanKeys;
 
-        // ── 入口
+        // 检测异常告警冷却：同一群系 5 秒内最多记录一次，防止常抛异常的群系刷爆日志
+        private static readonly ConcurrentDictionary<(string Mod, string Biome), long>
+            LastDetectionWarnTicks = new();
+        private static readonly TimeSpan DetectionWarnCooldown = TimeSpan.FromSeconds(5);
 
         public static void Run(Mod mod, bool enableStyling)
         {
@@ -66,8 +70,6 @@ namespace BTitlesLocalizationPatch.Scan
             );
         }
 
-        // ── 反射辅助
-
         private static BiomeTitlesMod? ResolveBTitlesInstance(Mod mod)
         {
             var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null) as BiomeTitlesMod;
@@ -101,8 +103,6 @@ namespace BTitlesLocalizationPatch.Scan
                 mod.Logger.Error(Localize("CheckerNull"));
             return list;
         }
-
-        // ── 核心扫描
 
         private static ScanResult? ScanAllModBiomes(
             Mod mod,
@@ -232,7 +232,9 @@ namespace BTitlesLocalizationPatch.Scan
                 added++;
                 if (newEntry.TitleColor == default)
                     pendingColor++;
-                string pendingColorSuffix = newEntry.TitleColor == default ? Localize("DefaultColorMarker") : "";
+                string pendingColorSuffix = newEntry.TitleColor == default
+                    ? Localize("DefaultColorMarker")
+                    : "";
                 mod.Logger.Info(
                     SafeFormat(Localize("NewBiome"), modBiome.Name, modBiome.DisplayName.Value, pendingColorSuffix)
                 );
@@ -267,8 +269,6 @@ namespace BTitlesLocalizationPatch.Scan
             return entry;
         }
 
-        // ── 检测函数
-
         private static Func<Player, string> BuildDetectionFunction(
             List<(Mod Mod, ModBiome Biome)> allBiomes,
             Dictionary<string, string> keyMapping
@@ -290,21 +290,31 @@ namespace BTitlesLocalizationPatch.Scan
                     }
                     catch (Exception ex)
                     {
-                        DebugLog.Warn(
-                            SafeFormat(
-                                Localize("DetectionEx"),
-                                sourceMod.Name,
-                                biome.Name,
-                                ex.Message
-                            )
+                        // 限频记录：群系检测异常常在特定区域反复触发，全量记录会刷屏
+                        string modName = sourceMod.Name;
+                        string biomeName = biome.Name;
+                        long now = DateTime.UtcNow.Ticks;
+                        long lastTicks = LastDetectionWarnTicks.GetOrAdd(
+                            (modName, biomeName),
+                            now
                         );
+                        if (now - lastTicks >= DetectionWarnCooldown.Ticks)
+                        {
+                            LastDetectionWarnTicks[(modName, biomeName)] = now;
+                            DebugLog.Warn(
+                                SafeFormat(
+                                    Localize("DetectionEx"),
+                                    modName,
+                                    biomeName,
+                                    ex.Message
+                                )
+                            );
+                        }
                     }
                 }
                 return "";
             };
         }
-
-        // ── 回滚
 
         private static void Rollback(Dictionary<string, BiomeEntry> biomeDict)
         {
@@ -319,8 +329,6 @@ namespace BTitlesLocalizationPatch.Scan
             ScannedBiomes = null;
             PreScanKeys = null;
         }
-
-        // ── 本地化辅助
 
         private static string Localize(string key) =>
             Language.GetTextValue($"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.{key}");
@@ -351,6 +359,9 @@ namespace BTitlesLocalizationPatch.Scan
         */
         public static void Cleanup()
         {
+            // 告警限频表无条件清理，避免上报群系在重启扫描后残留旧状态
+            LastDetectionWarnTicks.Clear();
+
             if (RegisteredCheckFunc == null)
                 return;
 
@@ -372,8 +383,6 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                // 如果有一天 BTitles 突然复活更新了，这条日志会告诉我们需要改什么
-                // 不移除 RegisteredCheckFunc 引用，保留以在下次清理时重试
                 DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
             }
         }
@@ -383,8 +392,6 @@ namespace BTitlesLocalizationPatch.Scan
             ScannedBiomes = null;
             PreScanKeys = null;
         }
-
-        // ── 内部数据传输
 
         private sealed record ScanResult(
             int Added,

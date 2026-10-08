@@ -27,6 +27,7 @@ Logs: {
 	UnregisteredBiomes: Scan disabled: unregistered {0} biome(s) from dictionary
 	FormatError: Failed to format log template: template="{0}" error={1}
 	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
+	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
 	ScanConfigNull: BTitlesConfig is null, scan toggle ON skipped
 }
 

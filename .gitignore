@@ -6,3 +6,6 @@
 /bin
 BTitlesLocalizationPatch.slnx
 /Properties
+.dsh-edit-review.json
+.dsh-edit-review-debug.log
+/libs

@@ -186,6 +186,9 @@ namespace BTitlesLocalizationPatch
         // 主菜单时 BTitles Instance 为 null，操作会静默跳过
         internal static void ApplyConfigChangeStyle(bool enabled)
         {
+            // 立即同步 Hook 的样式开关缓存，避免 3 秒冷却期内采样逻辑读到旧值
+            BiomeNameHook.UpdateStylingCache(enabled);
+
             if (!HookInstalled)
                 return;
 
@@ -343,6 +346,7 @@ namespace BTitlesLocalizationPatch
         public override void Unload()
         {
             BiomeNameHook.TranslationCache.Clear();
+            BiomeNameHook.ResetStylingCache();
 
             // 单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
             try

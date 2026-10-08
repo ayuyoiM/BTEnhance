@@ -27,6 +27,7 @@ Logs: {
 	UnregisteredBiomes: 已从字典卸载 {0} 个群系
 	FormatError: 格式化日志模板失败：模板="{0}" 错误={1}
 	SampleColorFailed: 从图标 （{0}x{1}） 采样主色失败：{2}
+	NativeTitleFailed: BTitles 原生标题解析失败：群系 [{0}]，错误={1}
 	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
 }
 
