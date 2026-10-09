@@ -391,6 +391,7 @@ namespace BTitlesLocalizationPatch.Scan
         {
             ScannedBiomes = null;
             PreScanKeys = null;
+            RegisteredCheckFunc = null;
         }
 
         private sealed record ScanResult(

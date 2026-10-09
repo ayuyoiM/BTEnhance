@@ -347,6 +347,7 @@ namespace BTitlesLocalizationPatch
         {
             BiomeNameHook.TranslationCache.Clear();
             BiomeNameHook.ResetStylingCache();
+            BiomeNameHook.ResetCultureCache();
 
             // 单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
             try
@@ -359,14 +360,15 @@ namespace BTitlesLocalizationPatch
             }
             _getActualTitleNameHook = null;
             HookInstalled = false;
-            _instanceField = null;
-            _biomeDictField = null;
-            _checkFuncsField = null;
-            _loaded = false;
 
             Scan.BiomeRegistrar.Cleanup();
             // 清理扫描记录，避免热重载后残留旧引用
             Scan.BiomeRegistrar.ClearScannedBiomes();
+
+            _instanceField = null;
+            _biomeDictField = null;
+            _checkFuncsField = null;
+            _loaded = false;
 
             // 清理调试日志写入器，防止卸载后残留引用
             Diagnostics.DebugLog.InfoWriter = s => { };

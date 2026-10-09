@@ -63,6 +63,12 @@ namespace BTitlesLocalizationPatch
             Volatile.Write(ref _lastStylingCheckTicks, 0L);
         }
 
+        // 热重载时重置文化名缓存，避免残留旧语言状态
+        internal static void ResetCultureCache()
+        {
+            _lastCultureName = "";
+        }
+
         public static string GetActualTitleNamePrefixHook(
             // orig 是 MonoMod 前缀 Hook 的原始方法引用，翻译链全未命中时作原生回落
             Func<BiomeTitlesUI, BiomeEntry, string> orig,
