@@ -1,12 +1,10 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using BTitles;
 using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
-using MonoMod.RuntimeDetour;
 using Terraria;
 using Terraria.Localization;
 using Terraria.ModLoader;
@@ -21,7 +19,6 @@ namespace BTitlesLocalizationPatch
     */
     public class BTitlesLocalizationPatch : Mod
     {
-        private Hook? _getActualTitleNameHook;
         private volatile bool _loaded;
 
         // volatile: 后台线程（PostSetupContent）读 Load（主线程）写入的最新值
@@ -34,8 +31,6 @@ namespace BTitlesLocalizationPatch
 
         // volatile: BiomeNameHook（UI 线程）读，Load（主线程）写
         internal static volatile bool HookInstalled;
-
-        private static readonly Type[] _expectedHookSignature = [typeof(BiomeEntry)];
 
         public override void Load()
         {
@@ -51,7 +46,7 @@ namespace BTitlesLocalizationPatch
 
             InstallDebugLogger();
             CacheReflectionFields();
-            InstallHookWithFingerprint();
+            GetActualTitleNameHookInstaller.Install(this);
         }
 
         // DebugLog InfoWriter/WarnWriter/ErrorWriter 对应 tModLoader Logger 级别
@@ -84,74 +79,6 @@ namespace BTitlesLocalizationPatch
             );
             if (_checkFuncsField == null)
                 Logger.Warn("Failed to reflect BiomeCheckFunctions field");
-        }
-
-        // 签名指纹验证：防止 BTitles 更新改变方法签名导致 new Hook() 崩溃
-        private void InstallHookWithFingerprint()
-        {
-            MethodInfo? getTitleMethod = typeof(BiomeTitlesUI).GetMethod(
-                "GetActualTitleName",
-                BindingFlags.NonPublic | BindingFlags.Instance
-            );
-
-            if (getTitleMethod == null)
-            {
-                HookInstalled = false;
-                Logger.Error("Failed to find BiomeTitlesUI.GetActualTitleName");
-                return;
-            }
-
-            if (!ValidateMethodSignature(getTitleMethod, _expectedHookSignature))
-            {
-                HookInstalled = false;
-                Logger.Error(
-                    $"Hook signature mismatch: actual {FormatMethodSignature(getTitleMethod)}, expected BiomeEntry"
-                );
-                return;
-            }
-
-            _getActualTitleNameHook = new Hook(
-                getTitleMethod,
-                new Func<
-                    Func<BiomeTitlesUI, BiomeEntry, string>,
-                    BiomeTitlesUI,
-                    BiomeEntry,
-                    string
-                >(BiomeNameHook.GetActualTitleNamePrefixHook)
-            );
-            HookInstalled = true;
-            Logger.Info("GetActualTitleName Detour patch applied successfully");
-        }
-
-        private static bool ValidateMethodSignature(MethodInfo method, Type[] expectedParamTypes)
-        {
-            var actualParams = method.GetParameters();
-            if (actualParams.Length != expectedParamTypes.Length)
-                return false;
-            for (int i = 0; i < actualParams.Length; i++)
-            {
-                if (actualParams[i].ParameterType != expectedParamTypes[i])
-                    return false;
-            }
-            return true;
-        }
-
-        private static string FormatMethodSignature(MethodInfo method)
-        {
-            var paramNames = method
-                .GetParameters()
-                .Select(p =>
-                {
-                    string name = p.ParameterType.IsByRef
-                        ? p.ParameterType.GetElementType()?.Name ?? "?"
-                        : p.ParameterType.Name;
-                    string mod =
-                        p.IsOut ? "out"
-                        : p.ParameterType.IsByRef ? "ref"
-                        : "";
-                    return mod.Length > 0 ? $"{name} {mod}" : name;
-                });
-            return $"{method.Name}({string.Join(", ", paramNames)})";
         }
 
         public override void PostSetupContent()
@@ -349,17 +276,7 @@ namespace BTitlesLocalizationPatch
             BiomeNameHook.ResetStylingCache();
             BiomeNameHook.ResetCultureCache();
 
-            // 单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
-            try
-            {
-                _getActualTitleNameHook?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Hook Dispose failed: {ex.Message}");
-            }
-            _getActualTitleNameHook = null;
-            HookInstalled = false;
+            GetActualTitleNameHookInstaller.Uninstall(this);
 
             Scan.BiomeRegistrar.Cleanup();
             // 清理扫描记录，避免热重载后残留旧引用
