@@ -54,7 +54,29 @@ namespace BTitlesLocalizationPatch.Scan
                 scanResult.AllBiomes,
                 scanResult.KeyMapping
             );
-            checkFuncs.Insert(0, RegisteredCheckFunc);
+            // 列表修改必须排到主线程执行，避免与 BTitles 的 CheckNewBiome 遍历竞态
+            var funcToInsert = RegisteredCheckFunc;
+            Main.QueueMainThreadAction(() =>
+            {
+                try
+                {
+                    var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null);
+                    if (instance == null)
+                        return;
+
+                    var checkFuncs =
+                        BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
+                        as List<Func<Player, string>>;
+                    if (checkFuncs == null)
+                        return;
+
+                    checkFuncs.Insert(0, funcToInsert);
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Warn($"Run: failed to insert check func - {ex.Message}");
+                }
+            });
             ScannedBiomes = biomes;
 
             mod.Logger.Info(
@@ -365,26 +387,31 @@ namespace BTitlesLocalizationPatch.Scan
             if (RegisteredCheckFunc == null)
                 return;
 
-            try
+            // 列表修改必须排到主线程执行，避免与 BTitles 的 CheckNewBiome 遍历竞态
+            var funcToRemove = RegisteredCheckFunc;
+            Main.QueueMainThreadAction(() =>
             {
-                var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null);
-                if (instance == null)
-                    return;
+                try
+                {
+                    var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null);
+                    if (instance == null)
+                        return;
 
-                var checkFuncs =
-                    BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
-                    as List<Func<Player, string>>;
-                if (checkFuncs == null)
-                    return;
+                    var checkFuncs =
+                        BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
+                        as List<Func<Player, string>>;
+                    if (checkFuncs == null)
+                        return;
 
-                checkFuncs.Remove(RegisteredCheckFunc);
-                // 只在成功移除后才释放引用；移除失败时保留引用，下次清理可重试
-                RegisteredCheckFunc = null;
-            }
-            catch (Exception ex)
-            {
-                DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
-            }
+                    checkFuncs.Remove(funcToRemove);
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                }
+            });
+            // 只在成功移除后才释放引用；移除失败时保留引用，下次清理可重试
+            RegisteredCheckFunc = null;
         }
 
         internal static void ClearScannedBiomes()
