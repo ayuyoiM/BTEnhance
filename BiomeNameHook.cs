@@ -245,6 +245,9 @@ namespace BTitlesLocalizationPatch
             if (match == null)
                 return null;
 
+            if (!Diagnostics.DebugLog.Enabled)
+                return match.NewName;
+
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
                     $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.CustomOverride",
@@ -278,6 +281,9 @@ namespace BTitlesLocalizationPatch
 
         private static void LogBiomeEntry(string key, string text, BiomeEntry entry, string tag)
         {
+            if (!Diagnostics.DebugLog.Enabled)
+                return;
+
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
                     $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.BiomeEntry",
