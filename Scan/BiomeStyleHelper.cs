@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
@@ -57,20 +58,26 @@ namespace BTitlesLocalizationPatch.Scan
             }
         }
 
+        // 采样上限：图标一般远小于此，超大图取这个规模也足够反映主色
+        private const int MaxSampleSize = 256;
+
         /*
         从整个图标采样，返回出现次数最多的颜色（众数）
         像素先量化到 32 级色块（RGB555）再统计，避免抗锯齿噪点把众数打散
-        采样上限 256x256：图标一般远小于此，大图也只需这个规模就能反映主色
         */
         public static Color SampleDominantColor(Texture2D icon)
         {
             if (icon == null || icon.IsDisposed || icon.Width <= 1 || icon.Height <= 1)
                 return Color.Gray;
 
-            int sampleWidth = Math.Min(icon.Width, 256);
-            int sampleHeight = Math.Min(icon.Height, 256);
+            int sampleWidth = Math.Min(icon.Width, MaxSampleSize);
+            int sampleHeight = Math.Min(icon.Height, MaxSampleSize);
+            int pixelCount = sampleWidth * sampleHeight;
 
-            Color[] pixels = new Color[sampleWidth * sampleHeight];
+            // 借缓冲而不是每次 new：采样跑在主线程的渲染路径上，
+            // 待补色的图标攒到几十个时，每次 256KB 的新分配会攒出一次明显卡顿
+            // Rent 返回的数组可能比请求的长，遍历一律以 pixelCount 为界
+            Color[] pixels = ArrayPool<Color>.Shared.Rent(pixelCount);
             try
             {
                 icon.GetData(
@@ -78,11 +85,12 @@ namespace BTitlesLocalizationPatch.Scan
                     new Rectangle(0, 0, sampleWidth, sampleHeight),
                     pixels,
                     0,
-                    pixels.Length
+                    pixelCount
                 );
             }
             catch (Exception ex)
             {
+                ArrayPool<Color>.Shared.Return(pixels);
                 DebugLog.Warn(
                     Language.GetTextValue(
                         $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.SampleColorFailed",
@@ -98,12 +106,13 @@ namespace BTitlesLocalizationPatch.Scan
             int highestFrequency = 0;
             Color mostCommonColor = Color.Gray;
 
-            foreach (ref Color pixel in pixels.AsSpan())
+            // 处理段必须同样以 pixelCount 为界，不能整个 span 走完借来的数组
+            foreach (ref Color pixel in pixels.AsSpan(0, pixelCount))
             {
                 // 跳过半透明像素：图标阴影与描边多为低 alpha，采进来会让标题发灰
                 if (pixel.A < 128)
                     continue;
-                // 跳过接近纯黑与纯白：R+G+B 范围为 0..765，两端颜色作为标题色看不清
+                // 跳过接近纯黑与纯白：R+G+B 范围为 0..765，这两端作标题色都看不清
                 int brightness = pixel.R + pixel.G + pixel.B;
                 if (brightness < 30 || brightness > 720)
                     continue;
@@ -125,6 +134,8 @@ namespace BTitlesLocalizationPatch.Scan
                 }
             }
 
+            // 借来的数组必须归还，否则每次采样都会泄漏一份 256KB
+            ArrayPool<Color>.Shared.Return(pixels);
             return highestFrequency > 0 ? mostCommonColor : Color.Gray;
         }
     }

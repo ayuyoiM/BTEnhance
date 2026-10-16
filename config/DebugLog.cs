@@ -4,12 +4,15 @@ using Terraria.ModLoader;
 
 namespace BTitlesLocalizationPatch.Diagnostics
 {
-    // 调试日志工具，按级别分流到 tModLoader 的 Logger
+    /*
+    调试日志工具，按级别分流到 tModLoader 的 Logger
+    */
     internal static class DebugLog
     {
         // 缓存配置值，配合冷却时间避免热路径中高频查询 ModContent.GetInstance
         // 修改配置后最多 3 秒生效，无需重载
         private static readonly TimedValueCache ConfigCache = new(
+            nameof(BTitlesConfig.EnableDebugLog),
             () => ModContent.GetInstance<BTitlesConfig>()?.EnableDebugLog ?? false,
             TimeSpan.FromSeconds(3)
         );

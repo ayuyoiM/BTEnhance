@@ -25,6 +25,7 @@ namespace BTitlesLocalizationPatch
         // 样式开关缓存：UI 渲染热路径避免每次查询 ModContent.GetInstance
         // 修改配置后最多 3 秒生效；ApplyConfigChangeStyle 会立即同步缓存
         private static readonly Diagnostics.TimedValueCache StylingCache = new(
+            nameof(BTitlesConfig.EnableAutoStyling),
             () => ModContent.GetInstance<BTitlesConfig>()?.EnableAutoStyling ?? false,
             TimeSpan.FromSeconds(3)
         );

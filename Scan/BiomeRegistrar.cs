@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using BTitles;
 using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
@@ -35,75 +36,106 @@ namespace BTitlesLocalizationPatch.Scan
             LastDetectionWarnTicks = new();
         private static readonly TimeSpan DetectionWarnCooldown = TimeSpan.FromSeconds(5);
 
+        // 扫描入场令牌：0=空闲（可扫描） 2=扫描进行中
+        // Run 的调用方既有 PostSetupContent（后台线程）也有配置回调（主线程），
+        // 单靠 ScannedBiomes != null 是读-判-写，两个线程可能同时通过
+        private static int _scanState;
+
         public static void Run(Mod mod, bool enableStyling)
         {
+            // 抢占令牌再判状态：这一步是原子的，同一时刻只有一个调用能进来
+            if (Interlocked.CompareExchange(ref _scanState, 2, 0) != 0)
+                return;
+
             // 已有生效结果就不再扫：重复扫描会把上次自己新增的条目当成「已有条目」快照，
             // 之后关闭扫描只能还原成扫描后的样子，条目和原值都回不来
             if (ScannedBiomes != null)
+            {
+                Interlocked.Exchange(ref _scanState, 1);
                 return;
+            }
 
             // RegisteredCheckFunc 马上要被本次覆盖，旧 lambda 不先摘掉就再也拿不回引用
             // 注意：本方法由 PostSetupContent（后台线程）调用，撤字典必须留给主线程
-            Cleanup();
-
-            PendingColorKeys.Clear();
-            var biomes = new List<(string DictKey, ModBiome Biome, bool IsNew)>();
-
-            var instance = ResolveBTitlesInstance();
-            var biomeDict = ResolveBiomeDictionary(instance);
-            var checkFuncs = ResolveCheckFunctions(instance);
-
-            // 后台线程只读遍历：不预取键快照，否则会与主线程写入同抢一个集合
-            var scanResult = ScanAllModBiomes(mod, biomeDict, enableStyling, biomes);
-
-            RegisteredCheckFunc = BuildDetectionFunction(
-                scanResult.AllBiomes,
-                scanResult.KeyMapping
-            );
-            PreScanValues = scanResult.ExistingSnapshots;
-            ScannedBiomes = biomes;
-
-            // BTitles 在主线程每帧遍历这两个集合，写入必须合并成一次主线程操作
-            // 捕获已解析的引用而不重新反射：Unload 会清空反射字段
-            var writes = scanResult.PendingWrites;
-            var funcToInsert = RegisteredCheckFunc;
-            Main.QueueMainThreadAction(() =>
+            try
             {
-                // 排队期间可能已被取消（Cleanup 清空了引用），提交会插回一个「无主」的函数
-                if (!ReferenceEquals(RegisteredCheckFunc, funcToInsert) || funcToInsert == null)
-                    return;
+                Cleanup();
 
-                // 也可能已「关扫描」，记录置空、字典已撤，此时提交的条目无人可追踪
-                if (!ReferenceEquals(ScannedBiomes, biomes))
-                    return;
+                PendingColorKeys.Clear();
+                var biomes = new List<(string DictKey, ModBiome Biome, bool IsNew)>();
 
-                try
+                var instance = ResolveBTitlesInstance();
+                var biomeDict = ResolveBiomeDictionary(instance);
+                var checkFuncs = ResolveCheckFunctions(instance);
+
+                // 后台线程只读遍历：不预取键快照，否则会与主线程写入同抢一个集合
+                var scanResult = ScanAllModBiomes(mod, biomeDict, enableStyling, biomes);
+
+                RegisteredCheckFunc = BuildDetectionFunction(
+                    scanResult.AllBiomes,
+                    scanResult.KeyMapping
+                );
+                PreScanValues = scanResult.ExistingSnapshots;
+                ScannedBiomes = biomes;
+
+                // 状态归到「已有生效结果」，此后重复开关扫描走上面那条早退
+                Interlocked.Exchange(ref _scanState, 1);
+
+                // BTitles 在主线程每帧遍历这两个集合，写入必须合并成一次主线程操作
+                // 捕获已解析的引用而不重新反射：Unload 会清空反射字段
+                var writes = scanResult.PendingWrites;
+                var funcToInsert = RegisteredCheckFunc;
+                Main.QueueMainThreadAction(() =>
                 {
-                    ApplyWrites(biomeDict, writes);
-                    checkFuncs.Insert(0, funcToInsert);
-                    mod.Logger.Info(
-                        SafeFormat(
-                            Localize("ScanSummary"),
-                            scanResult.Added,
-                            scanResult.Updated,
-                            scanResult.Skipped,
-                            biomeDict.Count,
-                            checkFuncs.Count,
-                            scanResult.PendingColor
-                        )
-                    );
-                }
-                catch (Exception ex)
-                {
-                    // 扫描结果提交不上去，注册的条目与检测函数就全是半成品
-                    // 此处已在主线程回调里，早已脱离 ModLoader.Load 的 try：
-                    // 抛出去不会被标记归属模组、也不会自动禁用，只会变成主循环里的裸异常
-                    // 所以只留一条 Error，不吞、不抛
-                    mod.Logger.Error(
-                        SafeFormat(Localize("ScanApplyFailed"), ex.Message)
-                    );
-                }
-            });
+                    // 排队期间可能已被取消（Cleanup 清空了引用），提交会插回一个「无主」的函数
+                    if (!ReferenceEquals(RegisteredCheckFunc, funcToInsert) || funcToInsert == null)
+                        return;
+
+                    // 也可能已「关扫描」，记录置空、字典已撤，此时提交的条目无人可追踪
+                    if (!ReferenceEquals(ScannedBiomes, biomes))
+                        return;
+
+                    try
+                    {
+                        ApplyWrites(biomeDict, writes);
+                        checkFuncs.Insert(0, funcToInsert);
+                        mod.Logger.Info(
+                            SafeFormat(
+                                Localize("ScanSummary"),
+                                scanResult.Added,
+                                scanResult.Updated,
+                                scanResult.Skipped,
+                                biomeDict.Count,
+                                checkFuncs.Count,
+                                scanResult.PendingColor
+                            )
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        // 扫描结果提交不上去，注册的条目与检测函数就全是半成品
+                        // 此处已在主线程回调里，早已脱离 ModLoader.Load 的 try：
+                        // 抛出去不会被标记归属模组、也不会自动禁用，只会变成主循环里的裸异常
+                        // 所以只留一条 Error，不吞、不抛
+                        mod.Logger.Error(
+                            SafeFormat(Localize("ScanApplyFailed"), ex.Message)
+                        );
+
+                        // ApplyWrites 是逐条写的，抛出时字典已被改了一半。
+                        // 就地撤销本次全部写入：此刻还握着 writes 与 PreScanValues，
+                        // 而且正好在主线程，是唯一能干净回退的时机
+                        UndoWrites(biomeDict, writes, checkFuncs, funcToInsert);
+                        Rollback();
+                    }
+                });
+            }
+            catch
+            {
+                // 解析或遍历阶段抛出时令牌还握在手里，不放回去就是永久锁死：
+                // 用户之后怎么开关扫描都会被上面那次抢占挡掉，再也不会重试
+                Rollback();
+                throw;
+            }
         }
 
         /*
@@ -211,7 +243,7 @@ namespace BTitlesLocalizationPatch.Scan
             catch (Exception ex)
             {
                 // 扫描中途失败：字典写入尚未提交，丢弃本次的临时登记后照样抛出
-                Rollback();
+                // 令牌由 Run 的 catch 统一放开，这里不碰，避免两处各放一次
                 throw new BTitlesIncompatibleException("ScanFailed", ex.Message, ex);
             }
 
@@ -397,12 +429,14 @@ namespace BTitlesLocalizationPatch.Scan
                     catch (Exception ex)
                     {
                         // 限频记录：群系检测异常常在特定区域反复触发，全量记录会刷屏
+                        // 种子值取 0 而非 now：GetOrAdd 命中已有项返回的是存的旧值，
+                        // 首次调用若用 now 作种子，now - now = 0 永远不够冷却，首见异常会被吞掉
                         string modName = sourceMod.Name;
                         string biomeName = biome.Name;
                         long now = DateTime.UtcNow.Ticks;
                         long lastTicks = LastDetectionWarnTicks.GetOrAdd(
                             (modName, biomeName),
-                            now
+                            0L
                         );
                         if (now - lastTicks >= DetectionWarnCooldown.Ticks)
                         {
@@ -422,10 +456,49 @@ namespace BTitlesLocalizationPatch.Scan
             };
         }
 
-        // 扫描中途失败：字典写入尚未提交，只需丢弃本次的临时登记
+        // 扫描中途失败：字典写入尚未提交，丢弃本次的临时登记
+        // 令牌也要放开，否则下次开关扫描会被 Run 的抢占直接挡掉
         private static void Rollback()
         {
             PendingColorKeys.Clear();
+            ScannedBiomes = null;
+            PreScanValues = null;
+            Interlocked.Exchange(ref _scanState, 0);
+        }
+
+        /*
+        提交失败后的就地回退，只在主线程的提交回调里调用
+        新增条目直接摘掉；改写过标题的已有条目按快照还原
+        检测函数若已插入也一并移除，避免它成为无人认领的孤儿
+        */
+        private static void UndoWrites(
+            Dictionary<string, BiomeEntry> biomeDict,
+            List<PendingWrite> writes,
+            List<Func<Player, string>> checkFuncs,
+            Func<Player, string>? funcToInsert
+        )
+        {
+            foreach (var write in writes)
+            {
+                if (write.Entry != null)
+                {
+                    biomeDict.Remove(write.DictKey);
+                    continue;
+                }
+
+                if (
+                    PreScanValues != null
+                    && PreScanValues.TryGetValue(write.DictKey, out var snapshot)
+                    && biomeDict.TryGetValue(write.DictKey, out var entry)
+                )
+                {
+                    entry.Title = snapshot.Title ?? entry.Title;
+                    entry.LocalizationScope = snapshot.LocalizationScope;
+                }
+            }
+
+            if (funcToInsert != null)
+                checkFuncs.Remove(funcToInsert);
         }
 
         private static string Localize(string key) =>
@@ -505,6 +578,7 @@ namespace BTitlesLocalizationPatch.Scan
             ScannedBiomes = null;
             PreScanValues = null;
             PendingColorKeys.Clear();
+            Interlocked.Exchange(ref _scanState, 0);
         }
 
         private sealed record ScanResult(

@@ -50,6 +50,7 @@ namespace BTitlesLocalizationPatch
 
             InstallDebugLogger();
             CacheReflectionFields();
+            ValidateReflectionTargets();
             GetActualTitleNameHookInstaller.Install(this);
 
             // 放在最后：此刻反射字段与日志器都已就绪，配置变更回调可以安全执行
@@ -65,9 +66,8 @@ namespace BTitlesLocalizationPatch
         }
 
         /*
-        只缓存字段引用，不在这里校验是否存在
-        取不到时由扫描入口抛 BTitlesIncompatibleException——
-        同一件事只在一处报错，不做「先预检再实测」的两道确认
+        只缓存字段引用，是否取得到交给 ValidateReflectionTargets
+        分开两步是为了让「取字段」与「判断能不能用」各自只有一份实现
         */
         private void CacheReflectionFields()
         {
@@ -85,6 +85,22 @@ namespace BTitlesLocalizationPatch
                 "BiomeCheckFunctions",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
+        }
+
+        /*
+        校验扫描要用的三个反射目标在不在
+        放在 Load 里而不是等扫描入口去抛：配置回调触发的扫描跑在主线程 UI 事件里，
+        早已脱离 ModLoader.Load 的 try，那时抛异常不会被归属模组、也不会禁用本模组，
+        只会变成主循环里一声没人认领的裸异常。加载期抛才是「拒绝加载」该有的样子
+        */
+        private static void ValidateReflectionTargets()
+        {
+            if (
+                _instanceField == null
+                || _biomeDictField == null
+                || _checkFuncsField == null
+            )
+                throw new BTitlesIncompatibleException("ScanTargetMissing");
         }
 
         public override void PostSetupContent()
