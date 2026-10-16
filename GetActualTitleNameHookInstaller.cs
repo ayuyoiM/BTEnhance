@@ -15,9 +15,11 @@ namespace BTitlesLocalizationPatch
     internal static class GetActualTitleNameHookInstaller
     {
         private static Hook? _getActualTitleNameHook;
+
+        // BTitles 改动方法参数时签名会变，靠它挡住 new Hook() 的崩溃
         private static readonly Type[] _expectedHookSignature = [typeof(BiomeEntry)];
 
-        // 签名指纹验证：防止 BTitles 更新改变方法签名导致 new Hook() 崩溃
+        // 安装 Hook；签名对不上只记日志并保持 HookInstalled=false，让补丁降级成「不介入」
         internal static void Install(Mod mod)
         {
             MethodInfo? getTitleMethod = typeof(BiomeTitlesUI).GetMethod(
@@ -48,13 +50,13 @@ namespace BTitlesLocalizationPatch
                     BiomeTitlesUI,
                     BiomeEntry,
                     string
-                >(BiomeNameHook.GetActualTitleNamePrefixHook)
+                >(BiomeNameHook.GetActualTitleNameHook)
             );
             BTitlesLocalizationPatch.HookInstalled = true;
             mod.Logger.Info("GetActualTitleName Detour patch applied successfully");
         }
 
-        // 单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
+        // 卸载 Hook；单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
         internal static void Uninstall(Mod mod)
         {
             try

@@ -10,27 +10,23 @@ using Terraria.ModLoader;
 
 namespace BTitlesLocalizationPatch.Scan
 {
-    /* 配色与图标工具：BackgroundColor 读取、图标加载、主色采样 */
+    // 配色与图标工具：BackgroundColor 读取、图标加载、主色采样
     internal static class BiomeStyleHelper
     {
-        // 取色链：群系返回色（BackgroundColor）→ default 让 Hook 补色
-        // 图标采样由 BiomeNameHook（主线程）执行，后台线程不可调用 GetData
-        public static void GetTitleColors(ModBiome? biome, out Color titleColor)
+        // 取色链：群系返回色（BackgroundColor）→ 无返回色时用白色，并标记等待图标采样
+        // 不用 Color.Transparent/default 作「待补色」哨兵：它是合法颜色值，会让标题真的不可见
+        // 采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
+        public static Color GetTitleColors(ModBiome? biome, out bool needsSampling)
         {
+            needsSampling = false;
             if (biome == null)
-            {
-                titleColor = default;
-                return;
-            }
+                return Color.White;
 
             if (biome.BackgroundColor.HasValue)
-            {
-                titleColor = biome.BackgroundColor.Value;
-                return;
-            }
+                return biome.BackgroundColor.Value;
 
-            // 留 default 让 BiomeNameHook 在主线程图标采样补色
-            titleColor = default;
+            needsSampling = true;
+            return Color.White;
         }
 
         /*
@@ -64,7 +60,8 @@ namespace BTitlesLocalizationPatch.Scan
 
         /*
         从整个图标采样，返回出现次数最多的颜色（众数）
-        像素量化到 32 级色块避免噪点干扰
+        像素先量化到 32 级色块（RGB555）再统计，避免抗锯齿噪点把众数打散
+        采样上限 256x256：图标一般远小于此，大图也只需这个规模就能反映主色
         */
         public static Color SampleDominantColor(Texture2D icon)
         {
@@ -104,8 +101,10 @@ namespace BTitlesLocalizationPatch.Scan
 
             foreach (ref Color pixel in pixels.AsSpan())
             {
+                // 跳过半透明像素：图标阴影与描边多为低 alpha，采进来会让标题发灰
                 if (pixel.A < 128)
                     continue;
+                // 跳过接近纯黑与纯白：R+G+B 范围为 0..765，两端颜色作为标题色看不清
                 int brightness = pixel.R + pixel.G + pixel.B;
                 if (brightness < 30 || brightness > 720)
                     continue;
@@ -118,6 +117,7 @@ namespace BTitlesLocalizationPatch.Scan
                 if (currentCount > highestFrequency)
                 {
                     highestFrequency = currentCount;
+                    // 量化丢掉了低 3 位，还原时每级左移 3 位再 +4 取色块中点
                     mostCommonColor = new Color(
                         (byte)(((colorKey >> 10) & 0x1F) << 3 | 4),
                         (byte)(((colorKey >> 5) & 0x1F) << 3 | 4),

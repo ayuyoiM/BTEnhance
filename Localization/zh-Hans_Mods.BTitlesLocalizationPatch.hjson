@@ -11,7 +11,6 @@ Logs: {
 	ConfigNull: 未获取到配置实例，扫描已跳过
 	DetectionEx: 检测 [{0}] 模组的 [{1}] 群系时出错: {2}
 	DictNull: 未获取到群系字典，自动发现功能已禁用
-	DictStats: 群系字典共 {0} 项，检测函数共 {1} 个
 	BiomeColor: RGB（{0},{1},{2}）
 	IconLoadFailed: 加载群系 [{0}] 的图标时失败: {1}
 	InstanceNull: 未获取到 BTitles 主模组实例，自动发现功能已禁用
@@ -25,6 +24,7 @@ Logs: {
 	RestyledOn: 已配色 {0} 个群系
 	RestyledOff: 已重置 {0} 个群系的颜色
 	UnregisteredBiomes: 已从字典卸载 {0} 个群系
+	RestoredBiomes: 已还原 {0} 个已有群系的原标题
 	FormatError: 格式化日志模板失败：模板="{0}" 错误={1}
 	SampleColorFailed: 从图标 （{0}x{1}） 采样主色失败：{2}
 	NativeTitleFailed: BTitles 原生标题解析失败：群系 [{0}]，错误={1}

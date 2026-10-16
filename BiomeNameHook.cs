@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Threading;
 using BTitles;
 using BTitlesLocalizationPatch.Scan;
 using Microsoft.Xna.Framework.Graphics;
@@ -25,43 +24,18 @@ namespace BTitlesLocalizationPatch
 
         // 样式开关缓存：UI 渲染热路径避免每次查询 ModContent.GetInstance
         // 修改配置后最多 3 秒生效；ApplyConfigChangeStyle 会立即同步缓存
-        private static volatile bool _cachedStylingEnabled;
-        private static long _lastStylingCheckTicks;
-        private static readonly long StylingCheckCooldownTicks = TimeSpan.FromSeconds(3).Ticks;
+        private static readonly Diagnostics.TimedValueCache StylingCache = new(
+            () => ModContent.GetInstance<BTitlesConfig>()?.EnableAutoStyling ?? false,
+            TimeSpan.FromSeconds(3)
+        );
 
-        private static bool IsStylingEnabled()
-        {
-            long now = DateTime.UtcNow.Ticks;
-            long lastTicks = Volatile.Read(ref _lastStylingCheckTicks);
-            if (now - lastTicks < StylingCheckCooldownTicks)
-                return _cachedStylingEnabled;
+        private static bool IsStylingEnabled() => StylingCache.Get();
 
-            Volatile.Write(ref _lastStylingCheckTicks, now);
-            try
-            {
-                _cachedStylingEnabled =
-                    ModContent.GetInstance<BTitlesConfig>()?.EnableAutoStyling ?? false;
-            }
-            catch
-            {
-                _cachedStylingEnabled = false;
-            }
-            return _cachedStylingEnabled;
-        }
-
-        // 配置变更时立即同步缓存，避免 3 秒冷却期内读取到旧值
-        internal static void UpdateStylingCache(bool enabled)
-        {
-            _cachedStylingEnabled = enabled;
-            Volatile.Write(ref _lastStylingCheckTicks, DateTime.UtcNow.Ticks);
-        }
+        // 配置变更时立即同步缓存，避免 3 秒冷却期内读到旧值
+        internal static void UpdateStylingCache(bool enabled) => StylingCache.Set(enabled);
 
         // 热重载时使缓存立即失效，下次调用重新读取配置
-        internal static void ResetStylingCache()
-        {
-            _cachedStylingEnabled = false;
-            Volatile.Write(ref _lastStylingCheckTicks, 0L);
-        }
+        internal static void ResetStylingCache() => StylingCache.Reset();
 
         // 热重载时重置文化名缓存，避免残留旧语言状态
         internal static void ResetCultureCache()
@@ -69,8 +43,8 @@ namespace BTitlesLocalizationPatch
             _lastCultureName = "";
         }
 
-        public static string GetActualTitleNamePrefixHook(
-            // orig 是 MonoMod 前缀 Hook 的原始方法引用，翻译链全未命中时作原生回落
+        public static string GetActualTitleNameHook(
+            // orig 是 MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
             Func<BiomeTitlesUI, BiomeEntry, string> orig,
             BiomeTitlesUI self,
             BiomeEntry biomeEntry
@@ -105,8 +79,13 @@ namespace BTitlesLocalizationPatch
                 return displayName;
             }
 
-            // 只有启用自动配色才运行时采样补色；关闭时保持 default（不可再被上色）
-            if (IsStylingEnabled() && biomeEntry.TitleColor == default && biomeEntry.Icon != null)
+            // 只给「群系没提供背景色」的条目补色：登记在 PendingColorKeys 里才算待补色
+            // 已按 BackgroundColor 取到颜色的条目，以及关闭配色时留下的白色，都不该被图标众数覆盖
+            if (
+                IsStylingEnabled()
+                && BiomeRegistrar.PendingColorKeys.ContainsKey(biomeEntry)
+                && biomeEntry.Icon != null
+            )
             {
                 // 热重载后 GPU 资源释放，图标引用可能已失效
                 if (biomeEntry.Icon.IsDisposed)
@@ -117,6 +96,8 @@ namespace BTitlesLocalizationPatch
                 if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
                 {
                     biomeEntry.TitleColor = BiomeStyleHelper.SampleDominantColor(biomeEntry.Icon);
+                    // 补色完成即出队，避免同一个条目每帧重复采样
+                    BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
                 }
             }
 
@@ -169,19 +150,21 @@ namespace BTitlesLocalizationPatch
                 var match = config.CustomBiomeNames?.FirstOrDefault(n => n.CurrentName == title);
                 if (match != null)
                 {
-                    if (hasValidKey)
-                        CacheEntry(cacheKey, title, "Fallback");
                     LogBiomeEntry(biomeEntry.Key ?? "", match.NewName, biomeEntry, "CustomName");
                     return match.NewName;
                 }
             }
 
             // 5. 回退：先尝试 BTitles 原生解析（未来版本新增逻辑自动跟随），异常时回退原始标题
+            // 这一层跟着 BTitles 的配置走，结果不进缓存，否则改配置要等切换语言才生效
             try
             {
                 string nativeTitle = orig(self, biomeEntry);
                 if (!string.IsNullOrEmpty(nativeTitle))
-                    return LogAndCache(biomeEntry, cacheKey, hasValidKey, nativeTitle, "Fallback");
+                {
+                    LogBiomeEntry(biomeEntry.Key ?? "", nativeTitle, biomeEntry, "Fallback");
+                    return nativeTitle;
+                }
             }
             catch (Exception ex)
             {
@@ -194,13 +177,9 @@ namespace BTitlesLocalizationPatch
                 );
             }
 
-            return LogAndCache(
-                biomeEntry,
-                cacheKey,
-                hasValidKey,
-                biomeEntry.Title ?? "",
-                "Fallback"
-            );
+            string fallbackTitle = biomeEntry.Title ?? "";
+            LogBiomeEntry(biomeEntry.Key ?? "", fallbackTitle, biomeEntry, "Fallback");
+            return fallbackTitle;
         }
 
         private static (string? Text, string? Tag) TryStep1(
@@ -351,7 +330,7 @@ namespace BTitlesLocalizationPatch
             if (string.IsNullOrEmpty(biomeKey) || BiomeRegistrar.ScannedBiomes == null)
                 return null;
 
-            foreach (var (dictKey, biome) in BiomeRegistrar.ScannedBiomes)
+            foreach (var (dictKey, biome, _) in BiomeRegistrar.ScannedBiomes)
             {
                 if (biome?.Name == biomeKey || dictKey == biomeKey)
                     return BiomeStyleHelper.TryLoadIcon(biome);

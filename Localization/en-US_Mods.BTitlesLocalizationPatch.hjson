@@ -1,5 +1,3 @@
-ExtraTitles.Terraria.Aether: Aether
-
 Logs: {
 	ScanEnabled: Biome auto-scan enabled, starting scan...
 	BiomeEntry: Biome: Key={0} Title={1}
@@ -11,7 +9,6 @@ Logs: {
 	ConfigNull: BTitlesConfig is null, scan skipped
 	DetectionEx: Exception detecting {0}.{1}: {2}
 	DictNull: BiomeDictionary is null
-	DictStats: Dictionary has {0} entries, {1} check functions
 	BiomeColor: RGB({0},{1},{2})
 	IconLoadFailed: Failed to load icon for biome [{0}]: {1}
 	InstanceNull: Instance is null
@@ -25,6 +22,7 @@ Logs: {
 	RestyledOn: Restyled {0} biomes (auto-styling ON)
 	RestyledOff: Reset colors for {0} biomes (auto-styling OFF)
 	UnregisteredBiomes: Scan disabled: unregistered {0} biome(s) from dictionary
+	RestoredBiomes: Restored original titles for {0} existing biome(s)
 	FormatError: Failed to format log template: template="{0}" error={1}
 	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
 	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
