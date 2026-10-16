@@ -66,7 +66,7 @@ Biome Titles 使用手动维护的方式收录群系名称
 
 - 感谢仍在使用 [Biome Titles](https://steamcommunity.com/sharedfiles/filedetails/?id=2992680615) 和使用本补丁的玩家
 - 所有提供反馈和建议的玩家
-- AI 辅助工具在本项目开发过程中的支持（模型 DeepSeek v4 flash）
+- AI 辅助工具在本项目开发过程中的支持（模型 DeepSeek v4.1 Flash）
 
 ## 许可证
 

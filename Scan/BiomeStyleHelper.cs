@@ -13,7 +13,6 @@ namespace BTitlesLocalizationPatch.Scan
     // 配色与图标工具：BackgroundColor 读取、图标加载、主色采样
     internal static class BiomeStyleHelper
     {
-        // 取色链：群系返回色（BackgroundColor）→ 无返回色时用白色，并标记等待图标采样
         // 不用 Color.Transparent/default 作「待补色」哨兵：它是合法颜色值，会让标题真的不可见
         // 采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
         public static Color GetTitleColors(ModBiome? biome, out bool needsSampling)

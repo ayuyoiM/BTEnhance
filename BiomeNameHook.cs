@@ -34,17 +34,15 @@ namespace BTitlesLocalizationPatch
         // 配置变更时立即同步缓存，避免 3 秒冷却期内读到旧值
         internal static void UpdateStylingCache(bool enabled) => StylingCache.Set(enabled);
 
-        // 热重载时使缓存立即失效，下次调用重新读取配置
         internal static void ResetStylingCache() => StylingCache.Reset();
 
-        // 热重载时重置文化名缓存，避免残留旧语言状态
         internal static void ResetCultureCache()
         {
             _lastCultureName = "";
         }
 
         public static string GetActualTitleNameHook(
-            // orig 是 MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
+            // MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
             Func<BiomeTitlesUI, BiomeEntry, string> orig,
             BiomeTitlesUI self,
             BiomeEntry biomeEntry
@@ -79,15 +77,15 @@ namespace BTitlesLocalizationPatch
                 return displayName;
             }
 
-            // 只给「群系没提供背景色」的条目补色：登记在 PendingColorKeys 里才算待补色
-            // 已按 BackgroundColor 取到颜色的条目，以及关闭配色时留下的白色，都不该被图标众数覆盖
+            // 只有登记在 PendingColorKeys 的条目才补色：已按 BackgroundColor 取到颜色的，
+            // 以及关配色时留下的白色，都不该被图标众数覆盖
             if (
                 IsStylingEnabled()
                 && BiomeRegistrar.PendingColorKeys.ContainsKey(biomeEntry)
                 && biomeEntry.Icon != null
             )
             {
-                // 热重载后 GPU 资源释放，图标引用可能已失效
+                // 热重载后图标可能已释放
                 if (biomeEntry.Icon.IsDisposed)
                 {
                     biomeEntry.Icon = TryReloadIcon(biomeEntry.Key);
@@ -96,7 +94,7 @@ namespace BTitlesLocalizationPatch
                 if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
                 {
                     biomeEntry.TitleColor = BiomeStyleHelper.SampleDominantColor(biomeEntry.Icon);
-                    // 补色完成即出队，避免同一个条目每帧重复采样
+                    // 出队，避免每帧重复采样
                     BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
                 }
             }
