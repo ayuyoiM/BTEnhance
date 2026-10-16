@@ -64,28 +64,27 @@ namespace BTitlesLocalizationPatch
             DebugLog.ErrorWriter = s => Logger.Error(s!);
         }
 
+        /*
+        只缓存字段引用，不在这里校验是否存在
+        取不到时由扫描入口抛 BTitlesIncompatibleException——
+        同一件事只在一处报错，不做「先预检再实测」的两道确认
+        */
         private void CacheReflectionFields()
         {
             _instanceField = typeof(BiomeTitlesMod).GetField(
                 "Instance",
                 BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_instanceField == null)
-                Logger.Warn("Failed to reflect Instance field");
 
             _biomeDictField = typeof(BiomeTitlesMod).GetField(
                 "BiomeDictionary",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_biomeDictField == null)
-                Logger.Warn("Failed to reflect BiomeDictionary field");
 
             _checkFuncsField = typeof(BiomeTitlesMod).GetField(
                 "BiomeCheckFunctions",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_checkFuncsField == null)
-                Logger.Warn("Failed to reflect BiomeCheckFunctions field");
         }
 
         public override void PostSetupContent()

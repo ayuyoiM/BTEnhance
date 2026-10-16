@@ -49,20 +49,12 @@ namespace BTitlesLocalizationPatch.Scan
             PendingColorKeys.Clear();
             var biomes = new List<(string DictKey, ModBiome Biome, bool IsNew)>();
 
-            var instance = ResolveBTitlesInstance(mod);
-            if (instance == null)
-                return;
-            var biomeDict = ResolveBiomeDictionary(instance, mod);
-            if (biomeDict == null)
-                return;
-            var checkFuncs = ResolveCheckFunctions(instance, mod);
-            if (checkFuncs == null)
-                return;
+            var instance = ResolveBTitlesInstance();
+            var biomeDict = ResolveBiomeDictionary(instance);
+            var checkFuncs = ResolveCheckFunctions(instance);
 
             // 后台线程只读遍历：不预取键快照，否则会与主线程写入同抢一个集合
             var scanResult = ScanAllModBiomes(mod, biomeDict, enableStyling, biomes);
-            if (scanResult == null)
-                return;
 
             RegisteredCheckFunc = BuildDetectionFunction(
                 scanResult.AllBiomes,
@@ -103,46 +95,54 @@ namespace BTitlesLocalizationPatch.Scan
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Warn($"Run: failed to apply scan result - {ex.Message}");
+                    // 扫描结果提交不上去，注册的条目与检测函数就全是半成品
+                    // 此处已在主线程回调里，早已脱离 ModLoader.Load 的 try：
+                    // 抛出去不会被标记归属模组、也不会自动禁用，只会变成主循环里的裸异常
+                    // 所以只留一条 Error，不吞、不抛
+                    mod.Logger.Error(
+                        SafeFormat(Localize("ScanApplyFailed"), ex.Message)
+                    );
                 }
             });
         }
 
-        private static BiomeTitlesMod? ResolveBTitlesInstance(Mod mod)
+        /*
+        三个解析器取不到目标就抛 BTitlesIncompatibleException
+        BTitles 是硬依赖（build.txt 的 modReferences），此刻必然已加载，
+        取不到只能是上游改了结构——那种情况下「跳过扫描」等于玩家看不出任何区别
+        */
+        private static BiomeTitlesMod ResolveBTitlesInstance()
         {
-            var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null) as BiomeTitlesMod;
-            if (instance == null)
-                mod.Logger.Error(Localize("InstanceNull"));
-            return instance;
+            if (BTitlesLocalizationPatch.InstanceField?.GetValue(null) is BiomeTitlesMod instance)
+                return instance;
+            throw new BTitlesIncompatibleException("ScanTargetMissing", "Instance");
         }
 
-        private static Dictionary<string, BiomeEntry>? ResolveBiomeDictionary(
-            BiomeTitlesMod instance,
-            Mod mod
+        private static Dictionary<string, BiomeEntry> ResolveBiomeDictionary(
+            BiomeTitlesMod instance
         )
         {
-            var dict =
+            if (
                 BTitlesLocalizationPatch.BiomeDictField?.GetValue(instance)
-                as Dictionary<string, BiomeEntry>;
-            if (dict == null)
-                mod.Logger.Error(Localize("DictNull"));
-            return dict;
+                is Dictionary<string, BiomeEntry> dict
+            )
+                return dict;
+            throw new BTitlesIncompatibleException("ScanTargetMissing", "BiomeDictionary");
         }
 
-        private static List<Func<Player, string>>? ResolveCheckFunctions(
-            BiomeTitlesMod instance,
-            Mod mod
+        private static List<Func<Player, string>> ResolveCheckFunctions(
+            BiomeTitlesMod instance
         )
         {
-            var list =
+            if (
                 BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
-                as List<Func<Player, string>>;
-            if (list == null)
-                mod.Logger.Error(Localize("CheckerNull"));
-            return list;
+                is List<Func<Player, string>> list
+            )
+                return list;
+            throw new BTitlesIncompatibleException("ScanTargetMissing", "BiomeCheckFunctions");
         }
 
-        private static ScanResult? ScanAllModBiomes(
+        private static ScanResult ScanAllModBiomes(
             Mod mod,
             Dictionary<string, BiomeEntry> biomeDict,
             bool enableStyling,
@@ -210,9 +210,9 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                mod.Logger.Error($"Biome scan failed, rolling back: {ex.Message}");
+                // 扫描中途失败：字典写入尚未提交，丢弃本次的临时登记后照样抛出
                 Rollback();
-                return null;
+                throw new BTitlesIncompatibleException("ScanFailed", ex.Message, ex);
             }
 
             return new ScanResult(

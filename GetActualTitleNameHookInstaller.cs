@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using System.Linq;
 using System.Reflection;
 using BTitles;
 using MonoMod.RuntimeDetour;
@@ -9,17 +8,14 @@ using Terraria.ModLoader;
 namespace BTitlesLocalizationPatch
 {
     /*
-    GetActualTitleName Hook 机制：签名指纹验证 + 安装/卸载
+    GetActualTitleName Hook 机制：安装/卸载
     业务逻辑（翻译链、缓存）留在 BiomeNameHook，此处只管 Hook 生命周期
     */
     internal static class GetActualTitleNameHookInstaller
     {
         private static Hook? _getActualTitleNameHook;
 
-        // BTitles 改动方法参数时签名会变，靠它挡住 new Hook() 的崩溃
-        private static readonly Type[] _expectedHookSignature = [typeof(BiomeEntry)];
-
-        // 安装 Hook；签名对不上只记日志并保持 HookInstalled=false，让补丁降级成「不介入」
+        // 安装 Hook；找不到方法抛 BTitlesIncompatibleException 拒绝加载
         internal static void Install(Mod mod)
         {
             MethodInfo? getTitleMethod = typeof(BiomeTitlesUI).GetMethod(
@@ -27,22 +23,16 @@ namespace BTitlesLocalizationPatch
                 BindingFlags.NonPublic | BindingFlags.Instance
             );
 
+            // 方法没了说明 BTitles 已改结构：抛出去让模组加载失败，
+            // 而不是置 HookInstalled=false 变成「界面照常，翻译悄悄不生效」
             if (getTitleMethod == null)
             {
                 BTitlesLocalizationPatch.HookInstalled = false;
-                mod.Logger.Error("Failed to find BiomeTitlesUI.GetActualTitleName");
-                return;
+                throw new BTitlesIncompatibleException("HookMethodMissing");
             }
 
-            if (!ValidateMethodSignature(getTitleMethod, _expectedHookSignature))
-            {
-                BTitlesLocalizationPatch.HookInstalled = false;
-                mod.Logger.Error(
-                    $"Hook signature mismatch: actual {FormatMethodSignature(getTitleMethod)}, expected BiomeEntry"
-                );
-                return;
-            }
-
+            // 不做签名预校验：委托签名对不上时 new Hook() 自己就会抛，
+            // 那一声异常同样会让 tModLoader 把本模组标成加载失败
             _getActualTitleNameHook = new Hook(
                 getTitleMethod,
                 new Func<
@@ -69,37 +59,6 @@ namespace BTitlesLocalizationPatch
             }
             _getActualTitleNameHook = null;
             BTitlesLocalizationPatch.HookInstalled = false;
-        }
-
-        private static bool ValidateMethodSignature(MethodInfo method, Type[] expectedParamTypes)
-        {
-            var actualParams = method.GetParameters();
-            if (actualParams.Length != expectedParamTypes.Length)
-                return false;
-            for (int i = 0; i < actualParams.Length; i++)
-            {
-                if (actualParams[i].ParameterType != expectedParamTypes[i])
-                    return false;
-            }
-            return true;
-        }
-
-        private static string FormatMethodSignature(MethodInfo method)
-        {
-            var paramNames = method
-                .GetParameters()
-                .Select(p =>
-                {
-                    string name = p.ParameterType.IsByRef
-                        ? p.ParameterType.GetElementType()?.Name ?? "?"
-                        : p.ParameterType.Name;
-                    string mod =
-                        p.IsOut ? "out"
-                        : p.ParameterType.IsByRef ? "ref"
-                        : "";
-                    return mod.Length > 0 ? $"{name} {mod}" : name;
-                });
-            return $"{method.Name}({string.Join(", ", paramNames)})";
         }
     }
 }

@@ -7,13 +7,10 @@ Logs: {
 	IconPresent: 有（{0}x{1}）
 	IconNull: 无
 	CustomOverride: 自定义覆盖：{0} → {1}
-	CheckerNull: 未获取到群系检测函数列表，自动发现功能已禁用
 	ConfigNull: 未获取到配置实例，扫描已跳过
 	DetectionEx: 检测 [{0}] 模组的 [{1}] 群系时出错: {2}
-	DictNull: 未获取到群系字典，自动发现功能已禁用
 	BiomeColor: RGB（{0},{1},{2}）
 	IconLoadFailed: 加载群系 [{0}] 的图标时失败: {1}
-	InstanceNull: 未获取到 BTitles 主模组实例，自动发现功能已禁用
 	NewBiome: 新增群系: [{0}] → {1}{2}
 	DefaultColorMarker: （未配色）
 	ScanningMod: 正在扫描模组 [{0}]，发现 {1} 个模组群系
@@ -29,6 +26,10 @@ Logs: {
 	SampleColorFailed: 从图标 （{0}x{1}） 采样主色失败：{2}
 	NativeTitleFailed: BTitles 原生标题解析失败：群系 [{0}]，错误={1}
 	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
+	HookMethodMissing: 找不到 BTitles 的 BiomeTitlesUI.GetActualTitleName 方法，补丁无法工作，已拒绝加载
+	ScanTargetMissing: 找不到 BTitles 的扫描目标，补丁无法工作，已拒绝加载
+	ScanFailed: 扫描群系时出错，补丁无法完成注册，已拒绝加载
+	ScanApplyFailed: 提交扫描结果时出错：{0}
 }
 
 SourceTags: {
