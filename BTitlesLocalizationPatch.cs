@@ -1,12 +1,10 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using BTitles;
 using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
-using MonoMod.RuntimeDetour;
 using Terraria;
 using Terraria.Localization;
 using Terraria.ModLoader;
@@ -21,8 +19,11 @@ namespace BTitlesLocalizationPatch
     */
     public class BTitlesLocalizationPatch : Mod
     {
-        private Hook? _getActualTitleNameHook;
         private volatile bool _loaded;
+
+        // 配置首次 OnChanged 早于 Mod.Load，那时反射字段还是 null，扫描与卸载都需据此早退
+        // 用静态标志而非 ModContent.GetInstance：后者在加载早期可能返回 null
+        internal static volatile bool LoadCompleted;
 
         // volatile: 后台线程（PostSetupContent）读 Load（主线程）写入的最新值
         private static volatile FieldInfo? _instanceField;
@@ -34,8 +35,6 @@ namespace BTitlesLocalizationPatch
 
         // volatile: BiomeNameHook（UI 线程）读，Load（主线程）写
         internal static volatile bool HookInstalled;
-
-        private static readonly Type[] _expectedHookSignature = [typeof(BiomeEntry)];
 
         public override void Load()
         {
@@ -51,7 +50,11 @@ namespace BTitlesLocalizationPatch
 
             InstallDebugLogger();
             CacheReflectionFields();
-            InstallHookWithFingerprint();
+            ValidateReflectionTargets();
+            GetActualTitleNameHookInstaller.Install(this);
+
+            // 放在最后：此刻反射字段与日志器都已就绪，配置变更回调可以安全执行
+            LoadCompleted = true;
         }
 
         // DebugLog InfoWriter/WarnWriter/ErrorWriter 对应 tModLoader Logger 级别
@@ -62,96 +65,42 @@ namespace BTitlesLocalizationPatch
             DebugLog.ErrorWriter = s => Logger.Error(s!);
         }
 
+        /*
+        只缓存字段引用，是否取得到交给 ValidateReflectionTargets
+        分开两步是为了让「取字段」与「判断能不能用」各自只有一份实现
+        */
         private void CacheReflectionFields()
         {
             _instanceField = typeof(BiomeTitlesMod).GetField(
                 "Instance",
                 BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_instanceField == null)
-                Logger.Warn("Failed to reflect Instance field");
 
             _biomeDictField = typeof(BiomeTitlesMod).GetField(
                 "BiomeDictionary",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_biomeDictField == null)
-                Logger.Warn("Failed to reflect BiomeDictionary field");
 
             _checkFuncsField = typeof(BiomeTitlesMod).GetField(
                 "BiomeCheckFunctions",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
-            if (_checkFuncsField == null)
-                Logger.Warn("Failed to reflect BiomeCheckFunctions field");
         }
 
-        // 签名指纹验证：防止 BTitles 更新改变方法签名导致 new Hook() 崩溃
-        private void InstallHookWithFingerprint()
+        /*
+        校验扫描要用的三个反射目标在不在
+        放在 Load 里而不是等扫描入口去抛：配置回调触发的扫描跑在主线程 UI 事件里，
+        早已脱离 ModLoader.Load 的 try，那时抛异常不会被归属模组、也不会禁用本模组，
+        只会变成主循环里一声没人认领的裸异常。加载期抛才是「拒绝加载」该有的样子
+        */
+        private static void ValidateReflectionTargets()
         {
-            MethodInfo? getTitleMethod = typeof(BiomeTitlesUI).GetMethod(
-                "GetActualTitleName",
-                BindingFlags.NonPublic | BindingFlags.Instance
-            );
-
-            if (getTitleMethod == null)
-            {
-                HookInstalled = false;
-                Logger.Error("Failed to find BiomeTitlesUI.GetActualTitleName");
-                return;
-            }
-
-            if (!ValidateMethodSignature(getTitleMethod, _expectedHookSignature))
-            {
-                HookInstalled = false;
-                Logger.Error(
-                    $"Hook signature mismatch: actual {FormatMethodSignature(getTitleMethod)}, expected BiomeEntry"
-                );
-                return;
-            }
-
-            _getActualTitleNameHook = new Hook(
-                getTitleMethod,
-                new Func<
-                    Func<BiomeTitlesUI, BiomeEntry, string>,
-                    BiomeTitlesUI,
-                    BiomeEntry,
-                    string
-                >(BiomeNameHook.GetActualTitleNamePrefixHook)
-            );
-            HookInstalled = true;
-            Logger.Info("GetActualTitleName Detour patch applied successfully");
-        }
-
-        private static bool ValidateMethodSignature(MethodInfo method, Type[] expectedParamTypes)
-        {
-            var actualParams = method.GetParameters();
-            if (actualParams.Length != expectedParamTypes.Length)
-                return false;
-            for (int i = 0; i < actualParams.Length; i++)
-            {
-                if (actualParams[i].ParameterType != expectedParamTypes[i])
-                    return false;
-            }
-            return true;
-        }
-
-        private static string FormatMethodSignature(MethodInfo method)
-        {
-            var paramNames = method
-                .GetParameters()
-                .Select(p =>
-                {
-                    string name = p.ParameterType.IsByRef
-                        ? p.ParameterType.GetElementType()?.Name ?? "?"
-                        : p.ParameterType.Name;
-                    string mod =
-                        p.IsOut ? "out"
-                        : p.ParameterType.IsByRef ? "ref"
-                        : "";
-                    return mod.Length > 0 ? $"{name} {mod}" : name;
-                });
-            return $"{method.Name}({string.Join(", ", paramNames)})";
+            if (
+                _instanceField == null
+                || _biomeDictField == null
+                || _checkFuncsField == null
+            )
+                throw new BTitlesIncompatibleException("ScanTargetMissing");
         }
 
         public override void PostSetupContent()
@@ -182,11 +131,14 @@ namespace BTitlesLocalizationPatch
             }
         }
 
-        // tModLoader 通知配置变更后直接执行，由 ModConfig.OnChanged 调用
-        // 主菜单时 BTitles Instance 为 null，操作会静默跳过
+        // 由 ModConfig.OnChanged 调用；主菜单时 BTitles Instance 为 null，操作会静默跳过
         internal static void ApplyConfigChangeStyle(bool enabled)
         {
-            if (!HookInstalled)
+            // 立即同步 Hook 的样式开关缓存，避免 3 秒冷却期内采样逻辑读到旧值
+            BiomeNameHook.UpdateStylingCache(enabled);
+
+            // 配色不依赖标题 Hook，早退会让已上色的条目撤不掉；Load 之前反射字段还是 null，见 LoadCompleted
+            if (!LoadCompleted)
                 return;
 
             if (
@@ -212,13 +164,10 @@ namespace BTitlesLocalizationPatch
         )
         {
             int styledCount = 0;
-            foreach (var (dictKey, modBiome) in Scan.BiomeRegistrar.ScannedBiomes!)
+            foreach (var (dictKey, modBiome, isNew) in Scan.BiomeRegistrar.ScannedBiomes!)
             {
-                // 跳过预存条目：不覆盖 BTitles 原有的配色
-                if (
-                    Scan.BiomeRegistrar.PreScanKeys != null
-                    && Scan.BiomeRegistrar.PreScanKeys.Contains(dictKey)
-                )
+                // 只处理本次扫描新增的条目：BTitles 原有的配色不动
+                if (!isNew)
                     continue;
 
                 if (!biomeDict.TryGetValue(dictKey, out var entry))
@@ -229,12 +178,21 @@ namespace BTitlesLocalizationPatch
 
                 if (enabled)
                 {
-                    Scan.BiomeStyleHelper.GetTitleColors(modBiome, out Color titleColor);
-                    entry.TitleColor = titleColor;
+                    entry.TitleColor = Scan.BiomeStyleHelper.GetTitleColors(
+                        modBiome,
+                        out bool needsSampling
+                    );
+                    // 没有 BackgroundColor 的条目记回待补色队列，等 Hook 用图标众数补上
+                    if (needsSampling)
+                        Scan.BiomeRegistrar.PendingColorKeys[entry] = 0;
+                    else
+                        Scan.BiomeRegistrar.PendingColorKeys.TryRemove(entry, out _);
                 }
                 else
                 {
-                    entry.TitleColor = default;
+                    // 关配色时还原成白色而不是 default（透明），否则标题会整个看不见
+                    entry.TitleColor = Color.White;
+                    Scan.BiomeRegistrar.PendingColorKeys.TryRemove(entry, out _);
                 }
                 styledCount++;
             }
@@ -253,7 +211,8 @@ namespace BTitlesLocalizationPatch
 
         internal static void ApplyConfigChangeScan(bool enabled)
         {
-            if (!HookInstalled)
+            // 扫描与检测函数注册都不依赖标题 Hook，早退会把注册过的群系留在字典里撤不掉
+            if (!LoadCompleted)
                 return;
 
             BiomeNameHook.TranslationCache.Clear();
@@ -294,75 +253,85 @@ namespace BTitlesLocalizationPatch
             }
         }
 
-        private static void UnregisterScannedBiomes(Mod mod)
+        // 卸载本次扫描的成果：移除新增条目、还原被覆盖的已有条目，并清掉检测函数与扫描状态
+        // mod 为 null 表示卸载途中实例已不可靠，不走 Mod.Logger
+        internal static void UnregisterScannedBiomes(Mod? mod)
         {
-            if (
-                Scan.BiomeRegistrar.ScannedBiomes == null
-                || Scan.BiomeRegistrar.ScannedBiomes.Count == 0
-            )
-            {
-                Scan.BiomeRegistrar.Cleanup();
-                return;
-            }
-
             var instance = InstanceField?.GetValue(null);
-            if (instance == null)
-                return;
+            var biomeDict =
+                instance == null
+                    ? null
+                    : BiomeDictField?.GetValue(instance) as Dictionary<string, BiomeEntry>;
 
-            var biomeDict = BiomeDictField?.GetValue(instance) as Dictionary<string, BiomeEntry>;
-            if (biomeDict == null)
-                return;
+            int removed = 0;
+            int restored = 0;
 
-            // 移除本次扫描新增的字典条目（快照中不存在的键）
-            if (Scan.BiomeRegistrar.PreScanKeys != null)
+            var scanned = Scan.BiomeRegistrar.ScannedBiomes;
+            if (biomeDict != null && scanned != null)
             {
-                int removed = 0;
-                foreach (var (dictKey, _) in Scan.BiomeRegistrar.ScannedBiomes!)
+                // 移除本次扫描新增的字典条目
+                foreach (var (dictKey, _, isNew) in scanned)
                 {
-                    if (
-                        dictKey != null
-                        && !Scan.BiomeRegistrar.PreScanKeys.Contains(dictKey)
-                        && biomeDict.Remove(dictKey)
-                    )
+                    if (isNew && biomeDict.Remove(dictKey))
                         removed++;
                 }
-                if (removed > 0)
-                    mod.Logger.Info(
-                        Language.GetTextValue(
-                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.UnregisteredBiomes",
-                            removed
-                        )
-                    );
             }
 
+            // 还原被扫描改写的已有条目字段，否则关掉扫描仍会显示补丁标题
+            var snapshots = Scan.BiomeRegistrar.PreScanValues;
+            if (biomeDict != null && snapshots != null)
+            {
+                foreach (var (dictKey, snapshot) in snapshots)
+                {
+                    if (!biomeDict.TryGetValue(dictKey, out var entry))
+                        continue;
+                    entry.Title = snapshot.Title ?? entry.Title;
+                    entry.LocalizationScope = snapshot.LocalizationScope;
+                    entry.TitleColor = snapshot.TitleColor;
+                    entry.Icon = snapshot.Icon;
+                    restored++;
+                }
+            }
+
+            if (removed > 0 && mod != null)
+                mod.Logger.Info(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.UnregisteredBiomes",
+                        removed
+                    )
+                );
+
+            if (restored > 0)
+                Diagnostics.DebugLog.Info(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RestoredBiomes",
+                        restored
+                    )
+                );
+
+            // 检测函数与扫描状态无条件清干净，早退路径不能把它们留在原地
             Scan.BiomeRegistrar.Cleanup();
-            Scan.BiomeRegistrar.ScannedBiomes = null;
-            Scan.BiomeRegistrar.PreScanKeys = null;
+            Scan.BiomeRegistrar.ClearScannedBiomes();
         }
 
         public override void Unload()
         {
             BiomeNameHook.TranslationCache.Clear();
+            BiomeNameHook.ResetStylingCache();
+            BiomeNameHook.ResetCultureCache();
 
-            // 单独 try-catch 包裹 Dispose，防止它抛异常阻断后续清理
-            try
-            {
-                _getActualTitleNameHook?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Hook Dispose failed: {ex.Message}");
-            }
-            _getActualTitleNameHook = null;
-            HookInstalled = false;
+            GetActualTitleNameHookInstaller.Uninstall(this);
+
+            // 必须撤字典：BTitles 不随本模组卸载，只清记录会让它的字典留下带不走的孤儿条目
+            // 传 null：卸载途中不再走 Mod.Logger
+            UnregisterScannedBiomes(null);
+
             _instanceField = null;
             _biomeDictField = null;
             _checkFuncsField = null;
             _loaded = false;
-
-            Scan.BiomeRegistrar.Cleanup();
-            // 清理扫描记录，避免热重载后残留旧引用
-            Scan.BiomeRegistrar.ClearScannedBiomes();
+            // 与 _loaded 同步归位：卸载后若再收到配置回调，不能在字段已清空的状态下执行
+            LoadCompleted = false;
 
             // 清理调试日志写入器，防止卸载后残留引用
             Diagnostics.DebugLog.InfoWriter = s => { };

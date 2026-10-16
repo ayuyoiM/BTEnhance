@@ -7,14 +7,10 @@ Logs: {
 	IconPresent: yes({0}x{1})
 	IconNull: no
 	CustomOverride: Custom override: {0} → {1}
-	CheckerNull: BiomeCheckFunctions is null
 	ConfigNull: BTitlesConfig is null, scan skipped
 	DetectionEx: Exception detecting {0}.{1}: {2}
-	DictNull: BiomeDictionary is null
-	DictStats: Dictionary has {0} entries, {1} check functions
 	BiomeColor: RGB({0},{1},{2})
 	IconLoadFailed: Failed to load icon for biome [{0}]: {1}
-	InstanceNull: Instance is null
 	NewBiome: New: {0} → {1}{2}
 	DefaultColorMarker: (default color)
 	ScanningMod: Scanning mod [{0}] with {1} ModBiomes
@@ -25,9 +21,16 @@ Logs: {
 	RestyledOn: Restyled {0} biomes (auto-styling ON)
 	RestyledOff: Reset colors for {0} biomes (auto-styling OFF)
 	UnregisteredBiomes: Scan disabled: unregistered {0} biome(s) from dictionary
+	RestoredBiomes: Restored original titles for {0} existing biome(s)
 	FormatError: Failed to format log template: template="{0}" error={1}
+	CacheReadFailed: Failed to read config [{0}], keeping the last cached value: {1}
 	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
+	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
 	ScanConfigNull: BTitlesConfig is null, scan toggle ON skipped
+	HookMethodMissing: BiomeTitlesUI.GetActualTitleName not found; the patch cannot work and refused to load
+	ScanTargetMissing: BTitles scan target not found; the patch cannot work and refused to load
+	ScanFailed: Biome scan failed, registration could not complete; the patch refused to load
+	ScanApplyFailed: Failed to apply scan result: {0}
 }
 
 SourceTags: {
