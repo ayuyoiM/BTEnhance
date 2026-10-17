@@ -5,13 +5,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BTitles;
-using BTitlesLocalizationPatch.Scan;
+using BTitlesEnhance.Scan;
 using Hjson;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
-namespace BTitlesLocalizationPatch
+namespace BTitlesEnhance
 {
     internal static class BiomeNameHook
     {
@@ -60,7 +60,7 @@ namespace BTitlesLocalizationPatch
         {
             if (self == null || biomeEntry == null)
                 return "";
-            if (!BTitlesLocalizationPatch.HookInstalled)
+            if (!BTitlesEnhance.HookInstalled)
                 return biomeEntry.Title ?? "";
 
             var config = self.Config;
@@ -133,7 +133,7 @@ namespace BTitlesLocalizationPatch
             if (baseText == null && shouldTranslate)
                 (baseText, baseTag) = TryLocalizedSteps(
                     "ExtraTitles",
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.ExtraTitles.{safeScope}.{sanitizedKey}"
+                    $"Mods.{nameof(BTitlesEnhance)}.ExtraTitles.{safeScope}.{sanitizedKey}"
                 );
 
             // 4. 自定义覆盖
@@ -178,7 +178,7 @@ namespace BTitlesLocalizationPatch
             {
                 Diagnostics.DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.NativeTitleFailed",
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.NativeTitleFailed",
                         biomeEntry.Key ?? "",
                         ex.Message
                     )
@@ -221,7 +221,7 @@ namespace BTitlesLocalizationPatch
         localizationKey 形如 Mods.{modName}.Biomes.{key}.DisplayName —— 对真实模组
         （tML 强制内部名是合法 C# 标识符）modName 就是不带点的 safeScope 首段。
         - 模组没带 en-US 资产 / 键缺失 ⇒ 无法比对，退回旧的 ASCII 启发式行为
-          （这是显式保留的兼容分支：BTitles 的翻译也在，但不能凭空捏造「没译」结论，宁可保守）
+        （这是显式保留的兼容分支：BTitles 的翻译也在，但不能凭空捏造「没译」结论，宁可保守）
         - 仅在非 en-US 语言下被调用（调用点已由 shouldTranslate 保证）
         */
         private static bool IsEnglishFallbackValue(
@@ -278,7 +278,7 @@ namespace BTitlesLocalizationPatch
 
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.CustomOverride",
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.CustomOverride",
                     currentName,
                     match.NewName
                 )
@@ -314,7 +314,7 @@ namespace BTitlesLocalizationPatch
 
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.BiomeEntry",
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.BiomeEntry",
                     key,
                     text
                 )
@@ -322,26 +322,26 @@ namespace BTitlesLocalizationPatch
             string iconInfo =
                 entry.Icon != null
                     ? Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.IconPresent",
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.IconPresent",
                         entry.Icon.Width,
                         entry.Icon.Height
                     )
                     : Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.IconNull"
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.IconNull"
                     );
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.BiomeDetail",
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.BiomeDetail",
                     entry.LocalizationScope ?? "",
                     iconInfo,
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.SourceTags.{tag}"
+                        $"Mods.{nameof(BTitlesEnhance)}.SourceTags.{tag}"
                     )
                 )
             );
             Diagnostics.DebugLog.Info(
                 Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.BiomeColor",
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.BiomeColor",
                     entry.TitleColor.R,
                     entry.TitleColor.G,
                     entry.TitleColor.B
@@ -424,7 +424,7 @@ namespace BTitlesLocalizationPatch
             {
                 Diagnostics.DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.EnUsMapFailed",
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.EnUsMapFailed",
                         mod.Name,
                         ex.Message
                     )

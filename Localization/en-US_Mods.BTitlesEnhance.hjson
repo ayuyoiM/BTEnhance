@@ -89,13 +89,17 @@ Configs: {
 			Label: Background color
 			Tooltip: Prefer the biome's declared background color
 		}
+
 		IconSampling: {
 			Label: Icon sampling
 			Tooltip: Always sample the dominant color from the biome icon
 		}
+
 		Fixed: {
 			Label: Fixed color
 			Tooltip: Always use the fixed color chosen below
 		}
+
+		Tooltip: ""
 	}
 }

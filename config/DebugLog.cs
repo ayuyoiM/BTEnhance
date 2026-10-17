@@ -2,7 +2,7 @@
 using System;
 using Terraria.ModLoader;
 
-namespace BTitlesLocalizationPatch.Diagnostics
+namespace BTitlesEnhance.Diagnostics
 {
     /*
     调试日志工具，按级别分流到 tModLoader 的 Logger

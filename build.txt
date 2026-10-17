@@ -1,6 +1,6 @@
 author = Mio
-displayName = Biome Titles Localization Patch
-displayName.zh-Hans = 生物群系名称 本地化增强补丁
+displayName = Biome Titles Enhance
+displayName.zh-Hans = 生物群系名称增强
 includeSource = false
 modReferences = BTitles
 side = Client

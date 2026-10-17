@@ -3,7 +3,7 @@ using System;
 using System.Threading;
 using Terraria.Localization;
 
-namespace BTitlesLocalizationPatch.Diagnostics
+namespace BTitlesEnhance.Diagnostics
 {
     /*
     带冷却的布尔配置值缓存
@@ -89,7 +89,7 @@ namespace BTitlesLocalizationPatch.Diagnostics
             try
             {
                 message = Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.CacheReadFailed",
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.CacheReadFailed",
                     _name,
                     ex.Message
                 );

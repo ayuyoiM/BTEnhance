@@ -6,15 +6,15 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using BTitles;
-using BTitlesLocalizationPatch;
-using BTitlesLocalizationPatch.Diagnostics;
+using BTitlesEnhance;
+using BTitlesEnhance.Diagnostics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
-namespace BTitlesLocalizationPatch.Scan
+namespace BTitlesEnhance.Scan
 {
     internal static class BiomeRegistrar
     {
@@ -158,7 +158,7 @@ namespace BTitlesLocalizationPatch.Scan
         */
         private static BiomeTitlesMod ResolveBTitlesInstance()
         {
-            if (BTitlesLocalizationPatch.InstanceField?.GetValue(null) is BiomeTitlesMod instance)
+            if (BTitlesEnhance.InstanceField?.GetValue(null) is BiomeTitlesMod instance)
                 return instance;
             throw new BTitlesIncompatibleException("ScanTargetMissing", "Instance");
         }
@@ -168,7 +168,7 @@ namespace BTitlesLocalizationPatch.Scan
         )
         {
             if (
-                BTitlesLocalizationPatch.BiomeDictField?.GetValue(instance)
+                BTitlesEnhance.BiomeDictField?.GetValue(instance)
                 is Dictionary<string, BiomeEntry> dict
             )
                 return dict;
@@ -180,7 +180,7 @@ namespace BTitlesLocalizationPatch.Scan
         )
         {
             if (
-                BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
+                BTitlesEnhance.CheckFuncsField?.GetValue(instance)
                 is List<Func<Player, string>> list
             )
                 return list;
@@ -563,7 +563,7 @@ namespace BTitlesLocalizationPatch.Scan
         }
 
         private static string Localize(string key) =>
-            Language.GetTextValue($"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.{key}");
+            Language.GetTextValue($"Mods.{nameof(BTitlesEnhance)}.Logs.{key}");
 
         // HJSON 本地化值可能含有未转义 { } 导致 FormatException，兜底返回原模板
         private static string SafeFormat(string format, params object[] args)
@@ -576,7 +576,7 @@ namespace BTitlesLocalizationPatch.Scan
             {
                 DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.FormatError",
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.FormatError",
                         format,
                         ex.Message
                     )
@@ -687,10 +687,10 @@ namespace BTitlesLocalizationPatch.Scan
         // 清理流程专用：BTitles 实例不在时返回 null，且不打错误日志
         private static List<Func<Player, string>>? ResolveRegisteredCheckFunctions()
         {
-            var instance = BTitlesLocalizationPatch.InstanceField?.GetValue(null);
+            var instance = BTitlesEnhance.InstanceField?.GetValue(null);
             return instance == null
                 ? null
-                : BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
+                : BTitlesEnhance.CheckFuncsField?.GetValue(instance)
                     as List<Func<Player, string>>;
         }
 
