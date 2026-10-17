@@ -1,9 +1,12 @@
 #nullable enable
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using BTitles;
 using BTitlesLocalizationPatch.Scan;
+using Hjson;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.Localization;
 using Terraria.ModLoader;
@@ -30,7 +33,7 @@ namespace BTitlesLocalizationPatch
             TimeSpan.FromSeconds(3)
         );
 
-        private static bool IsStylingEnabled() => StylingCache.Get();
+        internal static bool IsStylingEnabled() => StylingCache.Get();
 
         // 配置变更时立即同步缓存，避免 3 秒冷却期内读到旧值
         internal static void UpdateStylingCache(bool enabled) => StylingCache.Set(enabled);
@@ -41,6 +44,12 @@ namespace BTitlesLocalizationPatch
         {
             _lastCultureName = "";
         }
+
+        /*
+        PendingColorKeys 只在「BG 色缺失 → 需要采样」时入队（BuildNewEntry/ApplyStyleToScannedBiomes）
+        IconSampling 策略在 GetTitleColors 里也走 needsSampling=true，所以它会一直在队里，
+        补色逻辑天然对 Fixed 策略免疫（Fixed 不会进队列）
+        */
 
         public static string GetActualTitleNameHook(
             // MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
@@ -78,7 +87,7 @@ namespace BTitlesLocalizationPatch
                 return displayName;
             }
 
-            // 只有登记在 PendingColorKeys 的条目才补色：已按 BackgroundColor 取到颜色的，
+            // 只有登记在 PendingColorKeys 的条目才补色：已按策略直接取到颜色的，
             // 以及关配色时留下的白色，都不该被图标众数覆盖
             if (
                 IsStylingEnabled()
@@ -197,14 +206,55 @@ namespace BTitlesLocalizationPatch
                 if (scope == "Terraria")
                     return (localized, "BTitles");
 
-                // 非拉丁文字语言下纯 ASCII 值说明模组没提供当前语言的译文（英文回退），
-                // 跳过此步，让后续翻译链继续查找
-                if (IsNonLatinLanguage() && IsPureAscii(localized))
+                // 直接对照：源模组 en-US hjson 中同键的原文与当前取值一致 ⇒ 源模组未提供当前
+                // 语言译文（tML 英文回退），跳过步骤 1 走后续链。
+                if (IsEnglishFallbackValue(localizationKey, safeScope, localized))
                     return (null, null);
 
                 return (localized, "ModLocalization");
             }
             return (null, null);
+        }
+
+        /*
+        判断 localized 是否等于源模组 en-US 原文（未译）。
+        localizationKey 形如 Mods.{modName}.Biomes.{key}.DisplayName —— 对真实模组
+        （tML 强制内部名是合法 C# 标识符）modName 就是不带点的 safeScope 首段。
+        - 模组没带 en-US 资产 / 键缺失 ⇒ 无法比对，退回旧的 ASCII 启发式行为
+          （这是显式保留的兼容分支：BTitles 的翻译也在，但不能凭空捏造「没译」结论，宁可保守）
+        - 仅在非 en-US 语言下被调用（调用点已由 shouldTranslate 保证）
+        */
+        private static bool IsEnglishFallbackValue(
+            string localizationKey,
+            string safeScope,
+            string localized
+        )
+        {
+            // 提取模组名：Mods.{modName}.Biomes.{key}.DisplayName 的第 2 段
+            string modName = GetScopeModName(safeScope);
+            if (string.IsNullOrEmpty(modName))
+                return IsPureAscii(localized); // 结构异常时的保守回退（旧启发式）
+
+            Mod? mod = ModLoader.Mods.FirstOrDefault(m => m.Name == modName);
+            if (mod == null)
+                return IsPureAscii(localized);
+
+            IReadOnlyDictionary<string, string> map = GetEnUsMap(mod);
+            if (map.Count == 0)
+                return IsPureAscii(localized); // 无 en-US 资产：无法比对，走旧启发式
+
+            if (!map.TryGetValue(localizationKey, out string? englishValue))
+                return IsPureAscii(localized); // 键不在 en-US 里（BTitles 运行时注册的）：保守回退
+
+            return string.Equals(localized, englishValue, StringComparison.Ordinal);
+        }
+
+        // safeScope 形如 {modName}.{其他段}；模组名是合法标识符，不含「.」，
+        // 取第一个点之前的部分即 mod 名
+        private static string GetScopeModName(string safeScope)
+        {
+            int dot = safeScope.IndexOf('.');
+            return dot > 0 ? safeScope[..dot] : safeScope;
         }
 
         private static (string? Text, string? Tag) TryLocalizedSteps(string tag, string locKey)
@@ -310,19 +360,132 @@ namespace BTitlesLocalizationPatch
             return null;
         }
 
-        // 非拉丁文字语言：tModLoader 仅中/俄两种，模组可能未提供译文而回退英文
-        private static readonly string[] NonLatinLanguagePrefixes = ["zh-", "ru"];
+        // ---------------------------------------------------------------
+        // 步骤 1 英文原文对照（替代旧的 NonLatinLanguagePrefixes/IsPureAscii 启发式）
+        // 机制：直接比对「源模组 en-US hjson」与「当前语言取值」。
+        // 两者一致说明源模组根本没提供当前语言译文（tML 英文回退），跳过步骤 1 走后续链
+        // ---------------------------------------------------------------
 
-        private static bool IsNonLatinLanguage()
+        // mod 名 -> 该模组 en-US 本地化键值表（只含 DisplayName 会用到的键前缀）
+        // 负结果也缓存（模组没带 en-US 或解析失败时记空表，避免反复重试）
+        private static readonly ConcurrentDictionary<
+            string,
+            IReadOnlyDictionary<string, string>
+        > EnUsTranslationMaps = new();
+
+        /*
+        构建单个模组的 en-US 键值表
+        路径依据（已核对 tML 源码）：
+        - LocalizationLoader.TryGetCultureAndPrefixFromPath(path, out culture, out prefix)：public 静态，
+          文件名形如 en-US_Mods.XYZ.hjson → culture=en-US、prefix=Mods.XYZ
+        - Mod.RootContentSource.EnumerateAssets()：RootContentSource 对发行模组是 TModContentSource，
+          枚举出「含模组名前缀的完整资产路径」；OpenStream(assetName) 直接给流
+        建表键 = prefix + "." + 叶节点的点路径（即 tML 注册后的完整键），
+        值 = 叶节点字符串。只保留 Mods.* 前缀（步骤 1 只查这类键）
+        */
+        private static IReadOnlyDictionary<string, string> BuildEnUsMap(Mod mod)
         {
-            string name = Language.ActiveCulture.Name;
-            foreach (string prefix in NonLatinLanguagePrefixes)
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            try
             {
-                if (name.StartsWith(prefix))
-                    return true;
+                var source = mod.RootContentSource;
+                if (source == null)
+                    return result;
+
+                foreach (string assetPath in source.EnumerateAssets())
+                {
+                    if (!assetPath.EndsWith(".hjson", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    // 文件名（不含目录）做语言判定，与 tML 加载逻辑一致
+                    string fileName = Path.GetFileName(assetPath);
+                    if (
+                        !LocalizationLoader.TryGetCultureAndPrefixFromPath(
+                            fileName,
+                            out GameCulture? culture,
+                            out string? prefix
+                        ) || culture?.Name != "en-US" || string.IsNullOrEmpty(prefix)
+                    )
+                    {
+                        continue;
+                    }
+
+                    using var stream = source.OpenStream(assetPath);
+                    using var reader = new StreamReader(stream);
+                    string text = reader.ReadToEnd();
+                    if (string.IsNullOrWhiteSpace(text))
+                        continue;
+
+                    // Hjson 是 tML 引用库（tMLMod.targets 会带上 Libraries 下的 Hjson.dll）
+                    JsonValue parsed = HjsonValue.Parse(text);
+                    FlattenHjson(parsed, prefix, result);
+                }
             }
-            return false;
+            catch (Exception ex)
+            {
+                Diagnostics.DebugLog.Warn(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.EnUsMapFailed",
+                        mod.Name,
+                        ex.Message
+                    )
+                );
+            }
+            return result;
         }
+
+        // 展开解析后的 Hjson：叶子（非对象/数组）记为 key=value；数组一律跳过（本地化键不会是数组）
+        private static void FlattenHjson(
+            JsonValue value,
+            string prefix,
+            Dictionary<string, string> into
+        )
+        {
+            if (value is JsonObject obj)
+            {
+                foreach (string key in obj.Keys)
+                    FlattenHjson(obj[key], $"{prefix}.{key}", into);
+                return;
+            }
+            // 叶子：只有字符串才算本地化值（数字/布尔不是 DisplayName 场景，但也照记，代价可忽略）
+            string? text = HjsonValueCheck(value);
+            if (text != null && !into.ContainsKey(prefix))
+                into[prefix] = text;
+        }
+
+        private static string? HjsonValueCheck(JsonValue value)
+        {
+            try
+            {
+                // Hjson 3.x 的 Stringify 枚举没有 Json 成员；Json 格式即默认 ToString()
+                string text = value.ToString();
+                if (text != null && text.Length >= 2 && text[0] == '"' && text[^1] == '"')
+                    return text[1..^1];
+                return text;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /*
+        取模组的 en-US 映射（懒构建 + 负缓存）。
+        空表 = 该模组没带 en-US 资产或构建失败，后续直接落 TODAY'S 旧行为
+        */
+        private static IReadOnlyDictionary<string, string> GetEnUsMap(Mod mod)
+        {
+            return EnUsTranslationMaps.GetOrAdd(
+                mod.Name,
+                static name =>
+                {
+                    Mod? target = ModLoader.Mods.FirstOrDefault(m => m.Name == name);
+                    return target != null ? BuildEnUsMap(target) : new Dictionary<string, string>();
+                }
+            );
+        }
+
+        internal static void ResetEnUsMapCache() => EnUsTranslationMaps.Clear();
+
 
         private static Texture2D? TryReloadIcon(string? biomeKey)
         {

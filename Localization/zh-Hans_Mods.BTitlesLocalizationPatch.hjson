@@ -31,6 +31,8 @@ Logs: {
 	ScanTargetMissing: 找不到 BTitles 的扫描目标，补丁无法工作，已拒绝加载
 	ScanFailed: 扫描群系时出错，补丁无法完成注册，已拒绝加载
 	ScanApplyFailed: 提交扫描结果时出错：{0}
+	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
+	EnUsMapFailed: 构建模组 [{0}] 的 en-US 源文案表失败：{1}
 }
 
 SourceTags: {
@@ -48,6 +50,7 @@ Configs: {
 		Headers: {
 			Scan: 扫描
 			Debug: 调试
+			Styling: 配色
 		}
 
 		EnableScan: {
@@ -63,6 +66,36 @@ Configs: {
 		EnableDebugLog: {
 			Label: 调试日志
 			Tooltip: 输出调试日志到控制台
+		}
+
+		PreferredColorSource: {
+			Label: 颜色来源
+			Tooltip: 标题颜色的来源。背景色：优先用群系声明的背景色，缺失时回退图标采样；图标采样：总是从图标采主色；固定颜色：总是用下方选定的固定颜色
+		}
+
+		FixedTitleColor: {
+			Label: 固定标题颜色
+			Tooltip: 仅在颜色来源为「固定颜色」时生效
+		}
+
+		OnlyFillMissingBiomes: {
+			Label: 仅补漏群系
+			Tooltip: 开启后，扫描不再触碰 BTitles 已注册的群系：不覆写标题、不配色、不做快照
+		}
+	}
+
+	TitleColorSource: {
+		BackgroundColor: {
+			Label: 背景色
+			Tooltip: 优先使用群系声明的背景色
+		}
+		IconSampling: {
+			Label: 图标采样
+			Tooltip: 总是从群系图标采样主色
+		}
+		Fixed: {
+			Label: 固定颜色
+			Tooltip: 总是使用下方选定的固定颜色
 		}
 	}
 }

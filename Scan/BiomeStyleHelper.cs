@@ -14,13 +14,49 @@ namespace BTitlesLocalizationPatch.Scan
     // 配色与图标工具：BackgroundColor 读取、图标加载、主色采样
     internal static class BiomeStyleHelper
     {
-        // 不用 Color.Transparent/default 作「待补色」哨兵：它是合法颜色值，会让标题真的不可见
-        // 采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
-        public static Color GetTitleColors(ModBiome? biome, out bool needsSampling)
+        /*
+        读取配色策略与固定颜色（来自 ModConfig）
+        这里用 ?. 兜底：配置未加载（Mod.Load 前/卸载中）时退回默认策略 —— 背景色 + 白色
+        应用点在扫描（后台线程）与配色刷新（主线程），都不属于每帧热路径，故不做冷却缓存
+        */
+        public static (TitleColorSource Source, Color FixedColor) GetStylingSettings()
+        {
+            var config = ModContent.GetInstance<BTitlesConfig>();
+            Color fixedColor = config?.FixedTitleColor ?? Color.White;
+            // 用户没动过固定颜色时是初始透明/黑，兜成白色，避免 Fixed 策略下标题整个不可见
+            if (fixedColor == default)
+                fixedColor = Color.White;
+            return (config?.PreferredColorSource ?? TitleColorSource.BackgroundColor, fixedColor);
+        }
+
+        /*
+        不用 Color.Transparent/default 作「待补色」哨兵：它是合法颜色值，会让标题真的不可见
+        采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
+        策略语义：
+        - Fixed：一律返回用户挑的固定颜色，不采样
+        - IconSampling：一律登记采样（不管有没有背景色），初始白色占位，主线程补 icon 众数
+        - BackgroundColor（默认 = 旧行为）：有背景色用背景色，否则白色 + 采样
+        */
+        public static Color GetTitleColors(
+            ModBiome? biome,
+            TitleColorSource source,
+            Color fixedColor,
+            out bool needsSampling
+        )
         {
             needsSampling = false;
+
+            if (source == TitleColorSource.Fixed)
+                return fixedColor == default ? Color.White : fixedColor;
+
             if (biome == null)
                 return Color.White;
+
+            if (source == TitleColorSource.IconSampling)
+            {
+                needsSampling = true;
+                return Color.White;
+            }
 
             if (biome.BackgroundColor.HasValue)
                 return biome.BackgroundColor.Value;

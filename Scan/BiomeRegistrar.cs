@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using BTitles;
+using BTitlesLocalizationPatch;
 using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -43,6 +44,10 @@ namespace BTitlesLocalizationPatch.Scan
 
         public static void Run(Mod mod, bool enableStyling)
         {
+            enableStyling = BiomeNameHook.IsStylingEnabled();
+            bool onlyFillMissing = IsOnlyFillMissing();
+            (var colorSource, var fixedColor) = BiomeStyleHelper.GetStylingSettings();
+
             // 抢占令牌再判状态：这一步是原子的，同一时刻只有一个调用能进来
             if (Interlocked.CompareExchange(ref _scanState, 2, 0) != 0)
                 return;
@@ -69,7 +74,15 @@ namespace BTitlesLocalizationPatch.Scan
                 var checkFuncs = ResolveCheckFunctions(instance);
 
                 // 后台线程只读遍历：不预取键快照，否则会与主线程写入同抢一个集合
-                var scanResult = ScanAllModBiomes(mod, biomeDict, enableStyling, biomes);
+                var scanResult = ScanAllModBiomes(
+                    mod,
+                    biomeDict,
+                    enableStyling,
+                    onlyFillMissing,
+                    colorSource,
+                    fixedColor,
+                    biomes
+                );
 
                 RegisteredCheckFunc = BuildDetectionFunction(
                     scanResult.AllBiomes,
@@ -178,6 +191,9 @@ namespace BTitlesLocalizationPatch.Scan
             Mod mod,
             Dictionary<string, BiomeEntry> biomeDict,
             bool enableStyling,
+            bool onlyFillMissing,
+            TitleColorSource colorSource,
+            Color fixedColor,
             List<(string DictKey, ModBiome Biome, bool IsNew)> scannedBiomes
         )
         {
@@ -228,6 +244,9 @@ namespace BTitlesLocalizationPatch.Scan
                             targetMod,
                             biome,
                             enableStyling,
+                            onlyFillMissing,
+                            colorSource,
+                            fixedColor,
                             keyMapping,
                             scannedBiomes,
                             pendingWrites,
@@ -235,6 +254,7 @@ namespace BTitlesLocalizationPatch.Scan
                             mod,
                             ref added,
                             ref updated,
+                            ref skipped,
                             ref pendingColor
                         );
                     }
@@ -260,6 +280,16 @@ namespace BTitlesLocalizationPatch.Scan
         }
 
         /*
+        OnlyFillMissingBiomes：扫描只补漏，BTitles 字典里已有的条目完全不碰
+        这份配置只需扫描开始时读一次（低频），不进 TimedValueCache
+        */
+        private static bool IsOnlyFillMissing()
+        {
+            var config = ModContent.GetInstance<BTitlesConfig>();
+            return config?.OnlyFillMissingBiomes ?? false;
+        }
+
+        /*
         用 DeclaringType 而非 GetBaseDefinition() 判断：
         fgpt 等模组的 ILHook 会干扰 GetBaseDefinition 的行为
         */
@@ -282,6 +312,9 @@ namespace BTitlesLocalizationPatch.Scan
             Mod targetMod,
             ModBiome modBiome,
             bool enableStyling,
+            bool onlyFillMissing,
+            TitleColorSource colorSource,
+            Color fixedColor,
             Dictionary<string, string> keyMapping,
             List<(string DictKey, ModBiome Biome, bool IsNew)> scannedBiomes,
             List<PendingWrite> pendingWrites,
@@ -289,11 +322,27 @@ namespace BTitlesLocalizationPatch.Scan
             Mod mod,
             ref int added,
             ref int updated,
+            ref int skipped,
             ref int pendingColor
         )
         {
             string namespacedKey = $"{targetMod.Name}.{modBiome.Name}";
             string title = modBiome.DisplayName.Value ?? modBiome.Name;
+
+            /*
+            OnlyFillMissingBiomes：字典里已经在（命名空间键或短键命中都算已有）
+
+            就完全不动 —— 不快照、不覆写标题/作用域、不排队写入、不进 scannedBiomes
+            只计入 Skipped。BTitles 自己的条目保持原样
+            */
+            if (onlyFillMissing)
+            {
+                if (biomeDict.ContainsKey(namespacedKey) || biomeDict.ContainsKey(modBiome.Name))
+                {
+                    skipped++;
+                    return;
+                }
+            }
 
             if (biomeDict.TryGetValue(namespacedKey, out var entry))
             {
@@ -315,7 +364,14 @@ namespace BTitlesLocalizationPatch.Scan
                 return;
             }
 
-            var newEntry = BuildNewEntry(modBiome, targetMod, enableStyling, title);
+            var newEntry = BuildNewEntry(
+                modBiome,
+                targetMod,
+                enableStyling,
+                colorSource,
+                fixedColor,
+                title
+            );
             pendingWrites.Add(PendingWrite.Add(namespacedKey, newEntry, modBiome));
             keyMapping[namespacedKey] = namespacedKey;
             scannedBiomes.Add((namespacedKey, modBiome, true));
@@ -354,6 +410,8 @@ namespace BTitlesLocalizationPatch.Scan
             ModBiome modBiome,
             Mod targetMod,
             bool enableStyling,
+            TitleColorSource colorSource,
+            Color fixedColor,
             string title
         )
         {
@@ -371,9 +429,12 @@ namespace BTitlesLocalizationPatch.Scan
             {
                 entry.TitleColor = BiomeStyleHelper.GetTitleColors(
                     modBiome,
+                    colorSource,
+                    fixedColor,
                     out bool needsSampling
                 );
-                // 群系没给 BackgroundColor，登记进来等主线程用图标众数补色
+                // 待补色（策略为 IconSampling 或没有背景色），登记进来等主线程用图标众数补
+                // 配色整档关闭时不登记：那里只落白色
                 if (needsSampling)
                     PendingColorKeys[entry] = 0;
             }
@@ -560,6 +621,67 @@ namespace BTitlesLocalizationPatch.Scan
                     DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
                 }
             });
+        }
+
+        /*
+        Unload 专用：把「撤条目 + 还原快照 + 撤检测函数」合并成一次主线程操作并阻塞等待
+        非主线程时用 RunOnMainThread 跳过去（照抄 MusicLoader.CloseModStreams :210-211）；
+        Unload 由 ModLoader 在线程池线程调用，而 BTitles 主线程每帧都在遍历这两个集合
+        返回 true 表示检测函数移除成功（或已无函数可移除）；失败仅告警，不抛
+        */
+        internal static bool CleanupBlockingOnMainThread()
+        {
+            var funcToRemove = RegisteredCheckFunc;
+            LastDetectionWarnTicks.Clear();
+
+            if (funcToRemove != null && Program.IsMainThread)
+            {
+                // 已在主线程的可能极小（仅调试时手动调用），按 MusicLoader 语义直接内联执行
+                RemoveCheckFuncInline(funcToRemove);
+                return RegisteredCheckFunc == null;
+            }
+
+            if (funcToRemove == null)
+                return true;
+
+            try
+            {
+                var done = Main.RunOnMainThread(() => RemoveCheckFuncInline(funcToRemove))
+                    .GetAwaiter()
+                    .GetResult();
+                return done;
+            }
+            catch (Exception ex)
+            {
+                DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                return false;
+            }
+        }
+
+        // 与 Cleanup 的主线程回调保持同一套守卫的内联体：CleanupBlockingOnMainThread 用
+        private static bool RemoveCheckFuncInline(Func<Player, string> funcToRemove)
+        {
+            var checkFuncs = ResolveRegisteredCheckFunctions();
+            if (checkFuncs == null)
+            {
+                // BTitles 已卸载，列表随之消失，无需也无法移除
+                RegisteredCheckFunc = null;
+                return true;
+            }
+
+            try
+            {
+                // 与 Cleanup 的主线程回调同款守卫：只释放仍属于本次的函数
+                checkFuncs.Remove(funcToRemove);
+                if (RegisteredCheckFunc == funcToRemove)
+                    RegisteredCheckFunc = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                return false;
+            }
         }
 
         // 清理流程专用：BTitles 实例不在时返回 null，且不打错误日志

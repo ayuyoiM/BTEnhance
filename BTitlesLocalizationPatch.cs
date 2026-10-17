@@ -129,9 +129,15 @@ namespace BTitlesLocalizationPatch
                 );
                 Scan.BiomeRegistrar.Run(this, config.EnableAutoStyling);
             }
+            else if (config.EnableAutoStyling)
+            {
+                // 扫描关闭但配色开着：进世界仍要对齐一次策略（改了来源/固定颜色后重进世界生效）
+                ApplyConfigChangeStyle(true);
+            }
         }
 
         // 由 ModConfig.OnChanged 调用；主菜单时 BTitles Instance 为 null，操作会静默跳过
+        // enabled 参数仅控制 hook 层样式开关缓存；条目重配色读取当前完整策略（来源 + 固定颜色）
         internal static void ApplyConfigChangeStyle(bool enabled)
         {
             // 立即同步 Hook 的样式开关缓存，避免 3 秒冷却期内采样逻辑读到旧值
@@ -164,12 +170,10 @@ namespace BTitlesLocalizationPatch
         )
         {
             int styledCount = 0;
+            // 取一次策略与固定颜色：本循环内一致，逐项重读配置只会放大竞态
+            (var colorSource, Color fixedColor) = Scan.BiomeStyleHelper.GetStylingSettings();
             foreach (var (dictKey, modBiome, isNew) in Scan.BiomeRegistrar.ScannedBiomes!)
             {
-                // 只处理本次扫描新增的条目：BTitles 原有的配色不动
-                if (!isNew)
-                    continue;
-
                 if (!biomeDict.TryGetValue(dictKey, out var entry))
                     continue;
 
@@ -180,9 +184,11 @@ namespace BTitlesLocalizationPatch
                 {
                     entry.TitleColor = Scan.BiomeStyleHelper.GetTitleColors(
                         modBiome,
+                        colorSource,
+                        fixedColor,
                         out bool needsSampling
                     );
-                    // 没有 BackgroundColor 的条目记回待补色队列，等 Hook 用图标众数补上
+                    // 采样策略下总是登记待补色队列，等 Hook 用图标众数补上
                     if (needsSampling)
                         Scan.BiomeRegistrar.PendingColorKeys[entry] = 0;
                     else
@@ -257,6 +263,38 @@ namespace BTitlesLocalizationPatch
         // mod 为 null 表示卸载途中实例已不可靠，不走 Mod.Logger
         internal static void UnregisterScannedBiomes(Mod? mod)
         {
+            /*
+            BTitles 的字典是本补丁的 detour 读取的共享状态，主线程每帧都可能遍历
+            扫描路径的字典变动（PostSetupContent / 配置回调的提交回调）早已排队到主线程，
+            而这里一直漏了：Unload 由 ModLoader 在线程池线程调用（Mod.Internals.cs:34），
+            BiomeTitlesUI 若此刻正在遍历字典会直接读到撕裂状态
+            所以照抄 MusicLoader.CloseModStreams 的模式（MusicLoader.cs:210-211）：
+            非主线程时用 RunOnMainThread 阻塞跳到主线程再整批处理；已在本线程就直接走
+            */
+            if (!Program.IsMainThread)
+            {
+                try
+                {
+                    Main.RunOnMainThread(() => UnregisterScannedBiomes(mod))
+                        .GetAwaiter()
+                        .GetResult();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Unload 不得抛：吞掉异常只留告警
+                    // 扫描记录仍要归位，否则残留的 ScannedBiomes 引用会锁死下次扫描令牌
+                    Diagnostics.DebugLog.Warn(
+                        Language.GetTextValue(
+                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.UnloadHopFailed",
+                            ex.Message
+                        )
+                    );
+                    Scan.BiomeRegistrar.ClearScannedBiomes();
+                    return;
+                }
+            }
+
             var instance = InstanceField?.GetValue(null);
             var biomeDict =
                 instance == null
@@ -309,8 +347,12 @@ namespace BTitlesLocalizationPatch
                     )
                 );
 
-            // 检测函数与扫描状态无条件清干净，早退路径不能把它们留在原地
-            Scan.BiomeRegistrar.Cleanup();
+            /*
+            检测函数与扫描状态无条件清干净，早退路径不能把它们留在原地
+            与本轮条目撤除合并进同一个阻塞主线程跳转：这里的执行上下文由上面的
+            RunOnMainThread 保证是主线程；若走的是线程池路径（hop 失败早退）则不在此处清
+            */
+            Scan.BiomeRegistrar.CleanupBlockingOnMainThread();
             Scan.BiomeRegistrar.ClearScannedBiomes();
         }
 
@@ -319,6 +361,7 @@ namespace BTitlesLocalizationPatch
             BiomeNameHook.TranslationCache.Clear();
             BiomeNameHook.ResetStylingCache();
             BiomeNameHook.ResetCultureCache();
+            BiomeNameHook.ResetEnUsMapCache();
 
             GetActualTitleNameHookInstaller.Uninstall(this);
 
