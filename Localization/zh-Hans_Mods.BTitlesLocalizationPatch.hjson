@@ -127,17 +127,13 @@ Configs: {
 			Label: 背景色
 			Tooltip: 优先使用群系声明的背景色
 		}
-
 		IconSampling: {
 			Label: 图标采样
 			Tooltip: 总是从群系图标采样主色
 		}
-
 		Fixed: {
 			Label: 固定颜色
 			Tooltip: 总是使用下方选定的固定颜色
 		}
-
-		// Tooltip: ""
 	}
 }

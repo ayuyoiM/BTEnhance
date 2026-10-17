@@ -2,7 +2,7 @@
 using System;
 using Terraria.Localization;
 
-namespace BTitlesEnhance
+namespace BTitlesLocalizationPatch
 {
     /*
     补丁前提失效时的统一异常
@@ -26,7 +26,7 @@ namespace BTitlesEnhance
         private static string BuildMessage(string logKey, string? detail)
         {
             string text = Language.GetTextValue(
-                $"Mods.{nameof(BTitlesEnhance)}.Logs.{logKey}"
+                $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.{logKey}"
             );
             return detail == null ? text : $"{text} ({detail})";
         }

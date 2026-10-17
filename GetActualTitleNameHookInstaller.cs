@@ -5,7 +5,7 @@ using BTitles;
 using MonoMod.RuntimeDetour;
 using Terraria.ModLoader;
 
-namespace BTitlesEnhance
+namespace BTitlesLocalizationPatch
 {
     /*
     GetActualTitleName Hook 机制：安装/卸载
@@ -27,7 +27,7 @@ namespace BTitlesEnhance
             // 而不是置 HookInstalled=false 变成「界面照常，翻译悄悄不生效」
             if (getTitleMethod == null)
             {
-                BTitlesEnhance.HookInstalled = false;
+                BTitlesLocalizationPatch.HookInstalled = false;
                 throw new BTitlesIncompatibleException("HookMethodMissing");
             }
 
@@ -42,7 +42,7 @@ namespace BTitlesEnhance
                     string
                 >(BiomeNameHook.GetActualTitleNameHook)
             );
-            BTitlesEnhance.HookInstalled = true;
+            BTitlesLocalizationPatch.HookInstalled = true;
             mod.Logger.Info("GetActualTitleName Detour patch applied successfully");
         }
 
@@ -58,7 +58,7 @@ namespace BTitlesEnhance
                 mod.Logger.Warn($"Hook Dispose failed: {ex.Message}");
             }
             _getActualTitleNameHook = null;
-            BTitlesEnhance.HookInstalled = false;
+            BTitlesLocalizationPatch.HookInstalled = false;
         }
     }
 }

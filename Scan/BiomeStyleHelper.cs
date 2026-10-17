@@ -2,14 +2,14 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using BTitlesEnhance.Diagnostics;
+using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
-namespace BTitlesEnhance.Scan
+namespace BTitlesLocalizationPatch.Scan
 {
     // 配色与图标工具：BackgroundColor 读取、图标加载、主色采样
     internal static class BiomeStyleHelper
@@ -118,7 +118,7 @@ namespace BTitlesEnhance.Scan
             {
                 DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.IconLoadFailed",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.IconLoadFailed",
                         biome.FullName,
                         ex.Message
                     )
@@ -162,7 +162,7 @@ namespace BTitlesEnhance.Scan
                 ArrayPool<Color>.Shared.Return(pixels);
                 DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.SampleColorFailed",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.SampleColorFailed",
                         icon.Width,
                         icon.Height,
                         ex.Message

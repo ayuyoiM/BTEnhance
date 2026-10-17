@@ -4,13 +4,13 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using BTitles;
-using BTitlesEnhance.Diagnostics;
+using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
-namespace BTitlesEnhance
+namespace BTitlesLocalizationPatch
 {
     /*
     BTitles 增强
@@ -18,7 +18,7 @@ namespace BTitlesEnhance
     2. GetActualTitleName 增强 — 5 步回退链（源模组本地化→BTitles→补丁补充→自定义→原始标题）
     3. 自动配色 — 扫描时取 BackgroundColor，运行时 Hook 图标采样补色
     */
-    public class BTitlesEnhance : Mod
+    public class BTitlesLocalizationPatch : Mod
     {
         private volatile bool _loaded;
 
@@ -131,7 +131,7 @@ namespace BTitlesEnhance
             {
                 Logger.Error(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.ConfigNull"
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ConfigNull"
                     )
                 );
                 return;
@@ -141,7 +141,7 @@ namespace BTitlesEnhance
             {
                 Logger.Info(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.ScanEnabled"
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanEnabled"
                     )
                 );
                 Scan.BiomeRegistrar.Run(this, config.EnableAutoStyling);
@@ -206,7 +206,7 @@ namespace BTitlesEnhance
                 {
                     Diagnostics.DebugLog.Warn(
                         Language.GetTextValue(
-                            $"Mods.{nameof(BTitlesEnhance)}.Logs.RefreshUnavailable"
+                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RefreshUnavailable"
                         )
                     );
                 }
@@ -231,7 +231,7 @@ namespace BTitlesEnhance
                 // 即时刷新失败不该把配置保存变成一次报错：颜色下次切群系照样会生效
                 Diagnostics.DebugLog.Warn(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.RefreshFailed",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RefreshFailed",
                         ex.Message
                     )
                 );
@@ -288,7 +288,7 @@ namespace BTitlesEnhance
                 string restyleKey = enabled ? "RestyledOn" : "RestyledOff";
                 Diagnostics.DebugLog.Info(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.{restyleKey}",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.{restyleKey}",
                         styledCount
                     )
                 );
@@ -303,7 +303,7 @@ namespace BTitlesEnhance
 
             BiomeNameHook.TranslationCache.Clear();
 
-            var mod = ModContent.GetInstance<BTitlesEnhance>();
+            var mod = ModContent.GetInstance<BTitlesLocalizationPatch>();
             if (mod == null)
                 return;
 
@@ -314,7 +314,7 @@ namespace BTitlesEnhance
                 {
                     mod.Logger.Warn(
                         Language.GetTextValue(
-                            $"Mods.{nameof(BTitlesEnhance)}.Logs.ScanConfigNull"
+                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanConfigNull"
                         )
                     );
                 }
@@ -322,7 +322,7 @@ namespace BTitlesEnhance
                 {
                     mod.Logger.Info(
                         Language.GetTextValue(
-                            $"Mods.{nameof(BTitlesEnhance)}.Logs.ScanToggleOn"
+                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanToggleOn"
                         )
                     );
                     Scan.BiomeRegistrar.Run(mod, config.EnableAutoStyling);
@@ -332,7 +332,7 @@ namespace BTitlesEnhance
             {
                 mod.Logger.Info(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.ScanToggleOff"
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanToggleOff"
                     )
                 );
                 UnregisterScannedBiomes(mod);
@@ -354,7 +354,7 @@ namespace BTitlesEnhance
             if (config == null || !config.EnableScan)
                 return;
 
-            var mod = ModContent.GetInstance<BTitlesEnhance>();
+            var mod = ModContent.GetInstance<BTitlesLocalizationPatch>();
             if (mod == null)
                 return;
 
@@ -365,7 +365,7 @@ namespace BTitlesEnhance
 
             mod.Logger.Info(
                 Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesEnhance)}.Logs.RescanOnOnlyFillMissing"
+                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RescanOnOnlyFillMissing"
                 )
             );
 
@@ -399,7 +399,7 @@ namespace BTitlesEnhance
                     // 扫描记录仍要归位，否则残留的 ScannedBiomes 引用会锁死下次扫描令牌
                     Diagnostics.DebugLog.Warn(
                         Language.GetTextValue(
-                            $"Mods.{nameof(BTitlesEnhance)}.Logs.UnloadHopFailed",
+                            $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.UnloadHopFailed",
                             ex.Message
                         )
                     );
@@ -449,7 +449,7 @@ namespace BTitlesEnhance
             if (removed > 0 && mod != null)
                 mod.Logger.Info(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.UnregisteredBiomes",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.UnregisteredBiomes",
                         removed
                     )
                 );
@@ -457,7 +457,7 @@ namespace BTitlesEnhance
             if (restored > 0)
                 Diagnostics.DebugLog.Info(
                     Language.GetTextValue(
-                        $"Mods.{nameof(BTitlesEnhance)}.Logs.RestoredBiomes",
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RestoredBiomes",
                         restored
                     )
                 );

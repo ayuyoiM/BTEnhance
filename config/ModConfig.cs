@@ -5,14 +5,14 @@ using System.ComponentModel;
 using Microsoft.Xna.Framework;
 using Terraria.ModLoader.Config;
 
-namespace BTitlesEnhance
+namespace BTitlesLocalizationPatch
 {
     /*
     标题颜色策略
     - BackgroundColor：默认。优先用模组声明的 BackgroundColor，没有则白色并登记图标采样（旧行为）
     - IconSampling：总是从图标采主色（主线程），初始白色占位
     - Fixed：始终用用户指定的 FixedTitleColor
-    枚举成员的中文标签走 tML 自动注册键：Mods.BTitlesEnhance.Configs.TitleColorSource.{成员}.Label
+    枚举成员的中文标签走 tML 自动注册键：Mods.BTitlesLocalizationPatch.Configs.TitleColorSource.{成员}.Label
     */
     public enum TitleColorSource
     {
@@ -29,14 +29,14 @@ namespace BTitlesEnhance
     */
     public class BiomeColorMapping
     {
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BiomeColorMapping.Title.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BiomeColorMapping.Title.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Title.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Title.Tooltip")]
         public string Title { get; set; } = "";
 
         // 默认 Color 是 (0,0,0,0)，当作「还没填」处理，见 BiomeStyleHelper.TryGetMappedColor
         [ColorNoAlpha]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BiomeColorMapping.Color.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BiomeColorMapping.Color.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Tooltip")]
         public Color Color { get; set; }
     }
 
@@ -46,22 +46,22 @@ namespace BTitlesEnhance
 
         [Header("Scan")]
         [DefaultValue(false)]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableScan.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableScan.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableScan.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableScan.Tooltip")]
         public bool EnableScan { get; set; }
 
         // 开启后扫描只补漏：BTitles 字典里已存在的条目完全不动（不覆写标题/作用域、不配色、不做快照、不排队写入），
         // 只统计进 ScanResult.Skipped
         // 属于扫描期判定，改口径后必须重扫，见 OnChanged
         [DefaultValue(false)]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.OnlyFillMissingBiomes.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.OnlyFillMissingBiomes.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Tooltip")]
         public bool OnlyFillMissingBiomes { get; set; }
 
         [Header("Debug")]
         [DefaultValue(false)]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableDebugLog.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableDebugLog.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Tooltip")]
         public bool EnableDebugLog { get; set; }
 
         private bool _lastAutoStyling;
@@ -77,29 +77,29 @@ namespace BTitlesEnhance
         // 逐群系手工配色表也在它之下，关掉后整档不生效
         [Header("Styling")]
         [DefaultValue(false)]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableAutoStyling.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.EnableAutoStyling.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Tooltip")]
         public bool EnableAutoStyling { get; set; }
 
         // 标题配色策略，见 TitleColorSource 注释
         [DefaultValue(TitleColorSource.BackgroundColor)]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.PreferredColorSource.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.PreferredColorSource.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Tooltip")]
         public TitleColorSource PreferredColorSource { get; set; }
 
         // Fixed 策略用的固定颜色；不参与 alpha（无边框/背景纯色）
         [DefaultValue(typeof(Color), "255,255,255,255")]
         [ColorNoAlpha]
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.FixedTitleColor.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.FixedTitleColor.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FixedTitleColor.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FixedTitleColor.Tooltip")]
         public Color FixedTitleColor { get; set; }
 
         /*
         逐群系手工配色表：按最终显示名匹配，命中优先于 PreferredColorSource
         这里不设默认值：空表就是「谁都不用」，与玩家手动清空表格的行为一致
         */
-        [LabelKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.TitleColorMappings.Label")]
-        [TooltipKey("$Mods.BTitlesEnhance.Configs.BTitlesConfig.TitleColorMappings.Tooltip")]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.TitleColorMappings.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.TitleColorMappings.Tooltip")]
         public List<BiomeColorMapping> TitleColorMappings { get; set; } =
             new List<BiomeColorMapping>();
 
@@ -149,7 +149,7 @@ namespace BTitlesEnhance
                 || mappingsSignature != _lastMappingsSignature;
 
             if (styleToggleChanged || styleChanged)
-                BTitlesEnhance.ApplyConfigChangeStyle(styleCurrent);
+                BTitlesLocalizationPatch.ApplyConfigChangeStyle(styleCurrent);
 
             _lastAutoStyling = styleCurrent;
             _lastColorSource = colorSourceCurrent;
@@ -170,9 +170,9 @@ namespace BTitlesEnhance
               不清掉 ScannedBiomes 就永远扫不成第二次
             */
             if (scanChanged)
-                BTitlesEnhance.ApplyConfigChangeScan(scanCurrent);
+                BTitlesLocalizationPatch.ApplyConfigChangeScan(scanCurrent);
             else if (onlyFillChanged && scanCurrent)
-                BTitlesEnhance.ApplyConfigChangeOnlyFillMissing();
+                BTitlesLocalizationPatch.ApplyConfigChangeOnlyFillMissing();
 
             _lastScan = scanCurrent;
             _lastOnlyFillMissing = onlyFillCurrent;

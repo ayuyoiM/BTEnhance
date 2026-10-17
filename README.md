@@ -1,4 +1,4 @@
-# Biome Titles Enhance
+# Biome Titles Localization Patch
 
 [![Steam](https://img.shields.io/badge/%E5%88%9B%E6%84%8F%E5%B7%A5%E5%9D%8A-Steam?style=flat-square&logo=Steam&label=Steam&color=%23000000)](https://steamcommunity.com/sharedfiles/filedetails/?id=3758079429)
 ![Steam Update Date](https://img.shields.io/steam/update-date/3758079429?style=flat-square&label=工坊更新时间)
@@ -62,7 +62,7 @@ Biome Titles 使用手动维护的方式收录群系名称
 
 ## 配置说明
 
-在游戏内模组配置中找到「Biome Titles Enhance」即可调节：
+在游戏内模组配置中找到「Biome Titles Localization Patch」即可调节：
 
 | 配置项 | 默认值 | |
 | --- | :---: | --- |
