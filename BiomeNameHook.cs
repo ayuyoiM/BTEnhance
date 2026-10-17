@@ -7,6 +7,7 @@ using System.Linq;
 using BTitles;
 using BTitlesEnhance.Scan;
 using Hjson;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.Localization;
 using Terraria.ModLoader;
@@ -35,6 +36,34 @@ namespace BTitlesEnhance
 
         internal static bool IsStylingEnabled() => StylingCache.Get();
 
+        /*
+        被配色表覆盖前的原色
+        配色表是玩家随时会改的：命中时记下这一条目原本的颜色，撤销命中时还回去，
+        否则手工配色一旦覆盖过 BTitles 内置条目（如「地狱」），改回表就再也恢复不了
+        按引用比较：BiomeEntry 没重写 Equals，两个「值相等」的条目不是同一条
+        */
+        private static readonly ConcurrentDictionary<BiomeEntry, Color> MappedOriginalColors =
+            new(BiomeRegistrar.BiomeEntryReferenceComparer.Instance);
+
+        /*
+        卸载前把配色表改过的颜色还回去
+        平时靠 Hook 在下次显示时懒还原，但 Unload 之后 Hook 已摘，
+        不主动还原的话 BTitles 字典里会留下本模组的颜色（它不随本模组卸载）
+        */
+        internal static void RestoreMappedColors()
+        {
+            foreach (var pair in MappedOriginalColors)
+                pair.Key.TitleColor = pair.Value;
+            MappedOriginalColors.Clear();
+        }
+
+        /*
+        条目颜色被外部还原（扫描结果撤除）时丢掉对应记录
+        否则留下的「原色」是扫描后的颜色，下次撤销命中会把它盖回去，抹掉刚还原的基准值
+        */
+        internal static void ForgetMappedColor(BiomeEntry entry) =>
+            MappedOriginalColors.TryRemove(entry, out _);
+
         // 配置变更时立即同步缓存，避免 3 秒冷却期内读到旧值
         internal static void UpdateStylingCache(bool enabled) => StylingCache.Set(enabled);
 
@@ -44,12 +73,6 @@ namespace BTitlesEnhance
         {
             _lastCultureName = "";
         }
-
-        /*
-        PendingColorKeys 只在「BG 色缺失 → 需要采样」时入队（BuildNewEntry/ApplyStyleToScannedBiomes）
-        IconSampling 策略在 GetTitleColors 里也走 needsSampling=true，所以它会一直在队里，
-        补色逻辑天然对 Fixed 策略免疫（Fixed 不会进队列）
-        */
 
         public static string GetActualTitleNameHook(
             // MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
@@ -63,6 +86,43 @@ namespace BTitlesEnhance
             if (!BTitlesEnhance.HookInstalled)
                 return biomeEntry.Title ?? "";
 
+            string displayName = ResolveDisplayName(orig, self, biomeEntry);
+
+            /*
+            逐群系配色表按最终显示名匹配，且优先于策略色：
+            策略色只是批量兜底，玩家手工指定的那个名字此刻才真正可见
+            关配色时整档不生效，手工表也不越过这个开关
+            */
+            if (
+                IsStylingEnabled()
+                && BiomeStyleHelper.TryGetMappedColor(displayName, out var mappedColor)
+            )
+            {
+                // 首次命中先记原色；记过就不再覆盖，否则第二次命中会把「已覆盖的值」当原色存下
+                MappedOriginalColors.TryAdd(biomeEntry, biomeEntry.TitleColor);
+                biomeEntry.TitleColor = mappedColor;
+            }
+            else if (MappedOriginalColors.TryRemove(biomeEntry, out var originalColor))
+            {
+                // 命中过但现在不命中了（改了表 / 换了语言 / 关了配色）：还原本来的颜色
+                biomeEntry.TitleColor = originalColor;
+            }
+
+            return displayName;
+        }
+
+        /*
+        原来的整条解析链原样搬到这里：5 步查找、缓存、图标补色都在这一层
+        抽出来是为了让 Hook 能在拿到最终字符串之后再动颜色 ——
+        配色表按「看得见的名字」匹配，链上任何一个中间 return 都还不是最终值
+        */
+        private static string ResolveDisplayName(
+            // MonoMod 替换式 Hook 传入的原方法引用，翻译链全未命中时作原生回落
+            Func<BiomeTitlesUI, BiomeEntry, string> orig,
+            BiomeTitlesUI self,
+            BiomeEntry biomeEntry
+        )
+        {
             var config = self.Config;
             string biomeKey = biomeEntry.Key ?? "";
             string sanitizedKey = biomeKey.Replace(" ", "_");
@@ -470,7 +530,7 @@ namespace BTitlesEnhance
 
         /*
         取模组的 en-US 映射（懒构建 + 负缓存）。
-        空表 = 该模组没带 en-US 资产或构建失败，后续直接落 TODAY'S 旧行为
+        空表 = 该模组没带 en-US 资产或构建失败，后续一律退回旧的 ASCII 启发式
         */
         private static IReadOnlyDictionary<string, string> GetEnUsMap(Mod mod)
         {
@@ -485,7 +545,6 @@ namespace BTitlesEnhance
         }
 
         internal static void ResetEnUsMapCache() => EnUsTranslationMaps.Clear();
-
 
         private static Texture2D? TryReloadIcon(string? biomeKey)
         {

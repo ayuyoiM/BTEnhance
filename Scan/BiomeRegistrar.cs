@@ -334,11 +334,16 @@ namespace BTitlesEnhance.Scan
 
             就完全不动 —— 不快照、不覆写标题/作用域、不排队写入、不进 scannedBiomes
             只计入 Skipped。BTitles 自己的条目保持原样
+            逐条记日志：开了这个开关后玩家最想知道的就是「到底哪些被跳过了」，
+            只给一个总数等于没说
             */
             if (onlyFillMissing)
             {
                 if (biomeDict.ContainsKey(namespacedKey) || biomeDict.ContainsKey(modBiome.Name))
                 {
+                    mod.Logger.Info(
+                        SafeFormat(Localize("SkippedExistingBiome"), modBiome.Name, title)
+                    );
                     skipped++;
                     return;
                 }
@@ -744,7 +749,8 @@ namespace BTitlesEnhance.Scan
 
         // BiomeEntry 没重写 Equals，这里仍显式按引用比较，
         // 避免将来上游重写后，待补色集合把两个「值相等」的条目当成同一个
-        private sealed class BiomeEntryReferenceComparer : IEqualityComparer<BiomeEntry>
+        // 内部可见：BiomeNameHook 的配色表原色表也用同一套比较语义
+        internal sealed class BiomeEntryReferenceComparer : IEqualityComparer<BiomeEntry>
         {
             public static readonly BiomeEntryReferenceComparer Instance = new();
 

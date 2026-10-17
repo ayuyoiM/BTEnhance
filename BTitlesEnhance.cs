@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
 using BTitles;
 using BTitlesEnhance.Diagnostics;
 using Microsoft.Xna.Framework;
@@ -12,7 +13,7 @@ using Terraria.ModLoader;
 namespace BTitlesEnhance
 {
     /*
-    BTitles 本地化增强补丁
+    BTitles 增强
     1. 自动注册未收录群系 — 扫描各模组 ModBiome 并补入 BTitles 字典
     2. GetActualTitleName 增强 — 5 步回退链（源模组本地化→BTitles→补丁补充→自定义→原始标题）
     3. 自动配色 — 扫描时取 BackgroundColor，运行时 Hook 图标采样补色
@@ -32,6 +33,12 @@ namespace BTitlesEnhance
         internal static FieldInfo? InstanceField => _instanceField;
         internal static FieldInfo? BiomeDictField => _biomeDictField;
         internal static FieldInfo? CheckFuncsField => _checkFuncsField;
+
+        // 刷新当前标题用：BTitles 只在群系切换时重算颜色，改完配置得自己推一把
+        // 这两个取不到只影响「即时刷新」，不影响功能本身，故不参与 ValidateReflectionTargets
+        private static volatile FieldInfo? _uiField;
+        private static volatile MethodInfo? _setupVisualsMethod;
+        private static int _refreshWarned;
 
         // volatile: BiomeNameHook（UI 线程）读，Load（主线程）写
         internal static volatile bool HookInstalled;
@@ -83,6 +90,16 @@ namespace BTitlesEnhance
 
             _checkFuncsField = typeof(BiomeTitlesMod).GetField(
                 "BiomeCheckFunctions",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+            );
+
+            _uiField = typeof(BiomeTitlesMod).GetField(
+                "_biomeTitlesUi",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+            );
+
+            _setupVisualsMethod = typeof(BiomeTitlesUI).GetMethod(
+                "SetupTitleVisuals",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
             );
         }
@@ -148,20 +165,77 @@ namespace BTitlesEnhance
                 return;
 
             if (
-                Scan.BiomeRegistrar.ScannedBiomes == null
-                || Scan.BiomeRegistrar.ScannedBiomes.Count == 0
+                Scan.BiomeRegistrar.ScannedBiomes != null
+                && Scan.BiomeRegistrar.ScannedBiomes.Count > 0
             )
+            {
+                var instance = InstanceField?.GetValue(null);
+                var biomeDict =
+                    instance == null
+                        ? null
+                        : BiomeDictField?.GetValue(instance) as Dictionary<string, BiomeEntry>;
+
+                if (biomeDict != null)
+                    ApplyStyleToScannedBiomes(enabled, biomeDict);
+            }
+
+            /*
+            必须在重配色之后才刷新
+            配色表覆盖的是「当前显示名」，其中也可能有 BTitles 内置条目（如地狱）——
+            那些不在扫描结果里，只能靠这次刷新读到新颜色；
+            放在重配色之前刷，读到的是旧值，等于白刷
+            */
+            RefreshCurrentTitle();
+        }
+
+        /*
+        让 BTitles 重算一次当前标题的显示属性
+        BTitles 只在群系切换（CheckNewBiome 里 newBiome != _currentBiome）时才调 SetupTitleVisuals，
+        配置变更不会触发 —— 不推这一把，改完配色表要等走出再走回群系才看得到效果
+        方法名可能随上游版本变化：取不到就退化成「下次切换生效」，只告警一次，不影响功能
+        */
+        private static void RefreshCurrentTitle()
+        {
+            if (!Program.IsMainThread)
                 return;
 
+            // 反射字段取不到才算「不可用」：这是上游改了结构，只告警一次
+            if (_uiField == null || _setupVisualsMethod == null)
+            {
+                if (Interlocked.Exchange(ref _refreshWarned, 1) == 0)
+                {
+                    Diagnostics.DebugLog.Warn(
+                        Language.GetTextValue(
+                            $"Mods.{nameof(BTitlesEnhance)}.Logs.RefreshUnavailable"
+                        )
+                    );
+                }
+                return;
+            }
+
+            // 主菜单或 BTitles 尚未建界面：没有东西可刷，这不是异常状态，静默跳过
             var instance = InstanceField?.GetValue(null);
             if (instance == null)
                 return;
 
-            var biomeDict = BiomeDictField?.GetValue(instance) as Dictionary<string, BiomeEntry>;
-            if (biomeDict == null)
+            var ui = _uiField.GetValue(instance);
+            if (ui == null)
                 return;
 
-            ApplyStyleToScannedBiomes(enabled, biomeDict);
+            try
+            {
+                _setupVisualsMethod.Invoke(ui, null);
+            }
+            catch (Exception ex)
+            {
+                // 即时刷新失败不该把配置保存变成一次报错：颜色下次切群系照样会生效
+                Diagnostics.DebugLog.Warn(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesEnhance)}.Logs.RefreshFailed",
+                        ex.Message
+                    )
+                );
+            }
         }
 
         private static void ApplyStyleToScannedBiomes(
@@ -179,6 +253,12 @@ namespace BTitlesEnhance
 
                 if (modBiome == null)
                     continue;
+
+                /*
+                策略色即将重写这个条目的颜色：配色表记的「原色」随之过时
+                丢掉记录，让下一次命中重新按新策略色记基准，否则撤销命中会还原成旧策略的颜色
+                */
+                BiomeNameHook.ForgetMappedColor(entry);
 
                 if (enabled)
                 {
@@ -259,6 +339,39 @@ namespace BTitlesEnhance
             }
         }
 
+        /*
+        OnlyFillMissingBiomes 改了要重扫：它是扫描期判定，不重扫就会把新旧口径混进同一份结果
+        必须先撤再扫 —— BiomeRegistrar.Run 有「已有生效结果就不再扫」的早退，
+        不清掉 ScannedBiomes 就永远扫不成第二次；撤净顺带把扫描令牌放回空闲态
+        */
+        internal static void ApplyConfigChangeOnlyFillMissing()
+        {
+            if (!LoadCompleted)
+                return;
+
+            var config = ModContent.GetInstance<BTitlesConfig>();
+            // 扫描没开就没有结果可撤，也没必要平白起一次扫描
+            if (config == null || !config.EnableScan)
+                return;
+
+            var mod = ModContent.GetInstance<BTitlesEnhance>();
+            if (mod == null)
+                return;
+
+            // 撤净等于换了世界状态，链条缓存要一起丢
+            BiomeNameHook.TranslationCache.Clear();
+
+            UnregisterScannedBiomes(mod);
+
+            mod.Logger.Info(
+                Language.GetTextValue(
+                    $"Mods.{nameof(BTitlesEnhance)}.Logs.RescanOnOnlyFillMissing"
+                )
+            );
+
+            Scan.BiomeRegistrar.Run(mod, config.EnableAutoStyling);
+        }
+
         // 卸载本次扫描的成果：移除新增条目、还原被覆盖的已有条目，并清掉检测函数与扫描状态
         // mod 为 null 表示卸载途中实例已不可靠，不走 Mod.Logger
         internal static void UnregisterScannedBiomes(Mod? mod)
@@ -327,6 +440,8 @@ namespace BTitlesEnhance
                     entry.LocalizationScope = snapshot.LocalizationScope;
                     entry.TitleColor = snapshot.TitleColor;
                     entry.Icon = snapshot.Icon;
+                    // 刚把颜色还原成扫描前的基准值：配色表记的「原色」已过时，丢掉
+                    BiomeNameHook.ForgetMappedColor(entry);
                     restored++;
                 }
             }
@@ -362,6 +477,8 @@ namespace BTitlesEnhance
             BiomeNameHook.ResetStylingCache();
             BiomeNameHook.ResetCultureCache();
             BiomeNameHook.ResetEnUsMapCache();
+            // 配色表覆盖过的颜色必须还回 BTitles 字典，卸载后没有 Hook 再替它还原
+            BiomeNameHook.RestoreMappedColors();
 
             GetActualTitleNameHookInstaller.Uninstall(this);
 
@@ -372,6 +489,10 @@ namespace BTitlesEnhance
             _instanceField = null;
             _biomeDictField = null;
             _checkFuncsField = null;
+            _uiField = null;
+            _setupVisualsMethod = null;
+            // 告警只报一次的标志跟着归位：重载后上游若还是取不到，应该重新提醒一次
+            Interlocked.Exchange(ref _refreshWarned, 0);
             _loaded = false;
             // 与 _loaded 同步归位：卸载后若再收到配置回调，不能在字段已清空的状态下执行
             LoadCompleted = false;

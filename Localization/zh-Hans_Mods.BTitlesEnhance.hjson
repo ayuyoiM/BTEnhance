@@ -33,6 +33,10 @@ Logs: {
 	ScanApplyFailed: 提交扫描结果时出错：{0}
 	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
 	EnUsMapFailed: 构建模组 [{0}] 的 en-US 源文案表失败：{1}
+	SkippedExistingBiome: 已跳过已有群系: [{0}] → {1}（BTitles 已收录）
+	RescanOnOnlyFillMissing: 「仅补漏群系」已变更，正在先撤再扫……
+	RefreshUnavailable: 无法即时刷新当前标题（未取到 BTitles 的界面字段），新配色将在下次切换群系时生效
+	RefreshFailed: 刷新当前标题失败：{0}
 }
 
 SourceTags: {
@@ -70,7 +74,13 @@ Configs: {
 
 		PreferredColorSource: {
 			Label: 颜色来源
-			Tooltip: 标题颜色的来源。背景色：优先用群系声明的背景色，缺失时回退图标采样；图标采样：总是从图标采主色；固定颜色：总是用下方选定的固定颜色
+			Tooltip:
+			'''
+			标题颜色的来源。
+			- 背景色：优先用群系声明的背景色，缺失时回退图标采样；
+			- 图标采样：总是从图标采主色；
+			- 固定颜色：总是用下方选定的固定颜色
+			'''
 		}
 
 		FixedTitleColor: {
@@ -82,6 +92,34 @@ Configs: {
 			Label: 仅补漏群系
 			Tooltip: 开启后，扫描不再触碰 BTitles 已注册的群系：不覆写标题、不配色、不做快照
 		}
+
+		TitleColorMappings: {
+			Label: 逐群系标题颜色
+			Tooltip:
+			'''
+			为指定群系覆盖颜色来源，
+			按屏幕上实际显示的标题名匹配，
+			命中优先于上方「颜色来源」
+			'''
+		}
+	}
+
+	BiomeColorMapping: {
+		Title: {
+			Label: 标题文字
+			Tooltip: 
+			'''
+			屏幕上实际显示的群系标题
+			（当前语言下的样子）
+			'''
+		}
+
+		Color: {
+			Label: 标题颜色
+			Tooltip: 该标题使用的颜色
+		}
+
+		// Tooltip: ""
 	}
 
 	TitleColorSource: {

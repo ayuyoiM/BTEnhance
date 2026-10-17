@@ -33,6 +33,10 @@ Logs: {
 	ScanApplyFailed: Failed to apply scan result: {0}
 	UnloadHopFailed: Main-thread hop failed during unload ({0}); biomes left in BTitles dictionary
 	EnUsMapFailed: Failed to build en-US source map for mod [{0}]: {1}
+	SkippedExistingBiome: Skipped existing biome: [{0}] → {1} (already registered by BTitles)
+	RescanOnOnlyFillMissing: Only-fill-missing changed, rescanning (unregister then scan)...
+	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
+	RefreshFailed: Failed to refresh the current title: {0}
 }
 
 SourceTags: {
@@ -70,7 +74,13 @@ Configs: {
 
 		PreferredColorSource: {
 			Label: Color source
-			Tooltip: Where the title color comes from. BackgroundColor: use the biome's background color, fall back to icon sampling; IconSampling: always sample the dominant color from the icon; Fixed: always use the fixed color below
+			Tooltip:
+			'''
+			Where the title color comes from.
+			- BackgroundColor: use the biome's background color, fall back to icon sampling;
+			- IconSampling: always sample the dominant color from the icon;
+			- Fixed: always use the fixed color below
+			'''
 		}
 
 		FixedTitleColor: {
@@ -82,6 +92,34 @@ Configs: {
 			Label: Only fill missing biomes
 			Tooltip: When enabled, scanning never touches biomes already registered by BTitles: no title overwrite, no styling, no snapshot
 		}
+
+		TitleColorMappings: {
+			Label: Per-biome title colors
+			Tooltip: 
+			'''
+			Override the color source for specific biomes,
+			matched against the title as it is displayed on screen.
+			A match wins over the color source above
+			'''
+		}
+	}
+
+	BiomeColorMapping: {
+		Title: {
+			Label: Title text
+			Tooltip: 
+			'''
+			The biome title exactly as it appears on screen
+			(in the current language)
+			'''
+		}
+
+		Color: {
+			Label: Title color
+			Tooltip: Color used for this title
+		}
+
+		Tooltip: ""
 	}
 
 	TitleColorSource: {

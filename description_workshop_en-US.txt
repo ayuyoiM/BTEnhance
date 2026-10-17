@@ -8,10 +8,11 @@ This mod hooks into the title resolution to automate that process — reading tr
 [h2]Features[/h2]
 [list]
 [*]Biome Name Localization — Automatically loads each mod's translation files to display localized biome names
-[*]Source Mod Priority — Prioritizes the biome's own mod localization (supports translation mods); in non-Latin languages, skips plain ASCII fallback values and continues searching BTitles or this patch's translations
+[*]Source Mod Priority — Prioritizes the biome's own mod localization (supports translation mods); values identical to the source mod's en-US original are treated as untranslated, so the search continues in BTitles or this patch's translations
 [*]Extra Translations — Provides missing Biome Titles translations (e.g. Aether)
 [*]Auto Scan — Automatically discovers unregistered ModBiomes and adds them to Biome Titles; scan summary shows pending-color count [i](disabled by default)[/i]
 [*]Auto Styling — Assigns title colors to newly registered biomes: prefers the mod-defined BackgroundColor, falls back to icon sampling at runtime [i](disabled by default)[/i]
+[*]Per-Biome Colors — Assign a color to a specific biome by the title name shown on screen; takes priority over the automatic color source [i](disabled by default)[/i]
 [/list]
 
 [h2]Name Resolution Order[/h2]
@@ -27,7 +28,10 @@ The mod looks up biome names in the following priority order. Once a translation
 [h2]Configuration[/h2]
 [list]
 [*]Scan for new biomes — Auto-discover and register unregistered ModBiomes into the dictionary (takes effect immediately after saving)
-[*]Color Scheme — Assign title colors to newly added biomes (requires Scan enabled)
+[*]Only fill missing biomes — Skip biomes Biome Titles already has; no overwrite, no recolor; changing it triggers an immediate rescan
+[*]Color Scheme — Assign title colors to the biomes the scan covers; also the master switch for per-biome title colors
+[*]Color Source / Fixed Title Color — Pick the coloring strategy, or set the color used by the "Fixed" strategy
+[*]Per-biome title colors — Assign a color to a specific biome by the title name shown on screen; takes priority over Color Source
 [*]Debug logs — Output debug info to client.log for troubleshooting
 [/list]
 

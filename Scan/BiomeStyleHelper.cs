@@ -30,6 +30,39 @@ namespace BTitlesEnhance.Scan
         }
 
         /*
+        逐群系配色表：按玩家看得见的标题名精确匹配（区分大小写，不做模糊）
+        名字是玩家自己填的，与屏幕上的字不一致时宁可匹配不上，也不要猜错群系
+        配置未加载、表为空、或该项颜色还没填（默认全零）时返回 false，调用方沿用策略色
+        */
+        public static bool TryGetMappedColor(string? displayTitle, out Color color)
+        {
+            color = default;
+            if (string.IsNullOrEmpty(displayTitle))
+                return false;
+
+            var mappings = ModContent.GetInstance<BTitlesConfig>()?.TitleColorMappings;
+            if (mappings == null || mappings.Count == 0)
+                return false;
+
+            // 表一般是几条到几十条，线性扫描足够，不值得为它建字典与失效逻辑
+            foreach (var mapping in mappings)
+            {
+                if (mapping == null || mapping.Title != displayTitle)
+                    continue;
+
+                // 刚加进表还没选颜色时是 (0,0,0,0)：alpha 为 0 会让标题整个看不见，当作没配
+                // 用 continue 而不是 return false：同名条目可能不止一条，后面那条也许填了颜色
+                if (mapping.Color == default)
+                    continue;
+
+                color = mapping.Color;
+                return true;
+            }
+
+            return false;
+        }
+
+        /*
         不用 Color.Transparent/default 作「待补色」哨兵：它是合法颜色值，会让标题真的不可见
         采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
         策略语义：
