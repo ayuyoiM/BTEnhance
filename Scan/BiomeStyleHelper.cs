@@ -210,7 +210,7 @@ namespace BTitlesLocalizationPatch.Scan
         深色群系的图标尤其明显，直接当标题字色会糊在背景里
         只抬 L、不动 H 与 S，颜色不会偏色相，也不会因为提亮而褪成粉白
         */
-        private const float MinLightness = 0.5f;
+        private const float MinLightness = 0.4f;
 
         /*
         从整个图标采样，返回所有有效像素的平均色（代表性颜色）
