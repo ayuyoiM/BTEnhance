@@ -1,7 +1,7 @@
 # Biome Titles Enhance
 
 [![Steam](https://img.shields.io/badge/%E5%88%9B%E6%84%8F%E5%B7%A5%E5%9D%8A-Steam?style=flat-square&logo=Steam&label=Steam&color=%23000000)](https://steamcommunity.com/sharedfiles/filedetails/?id=3758079429)
-![Steam Update Date](https://img.shields.io/steam/update-date/3758079429?style=flat-square&label=工坊更新时间)
+[![Steam Update Date](https://img.shields.io/steam/update-date/3758079429?style=flat-square&label=工坊更新时间)](https://steamcommunity.com/sharedfiles/filedetails/changelog/3758079429)
 
 一个为 [Biome Titles（生物群系名称）](https://steamcommunity.com/sharedfiles/filedetails/?id=2992680615) 提供本地化与配色增强的 tModLoader 模组。
 

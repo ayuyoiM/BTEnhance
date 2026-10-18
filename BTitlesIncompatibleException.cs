@@ -15,11 +15,7 @@ namespace BTitlesLocalizationPatch
         public BTitlesIncompatibleException(string logKey, string? detail = null)
             : base(BuildMessage(logKey, detail)) { }
 
-        public BTitlesIncompatibleException(
-            string logKey,
-            string? detail,
-            Exception innerException
-        )
+        public BTitlesIncompatibleException(string logKey, string? detail, Exception innerException)
             : base(BuildMessage(logKey, detail), innerException) { }
 
         // 复用 Logs 下的本地化文案，异常信息对玩家可读

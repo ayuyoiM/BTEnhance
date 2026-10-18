@@ -33,8 +33,10 @@ namespace BTitlesLocalizationPatch.Scan
         );
 
         // 同一群系 5 秒内最多告警一次，防止常抛异常的群系刷爆日志
-        private static readonly ConcurrentDictionary<(string Mod, string Biome), long>
-            LastDetectionWarnTicks = new();
+        private static readonly ConcurrentDictionary<
+            (string Mod, string Biome),
+            long
+        > LastDetectionWarnTicks = new();
         private static readonly TimeSpan DetectionWarnCooldown = TimeSpan.FromSeconds(5);
 
         // 扫描入场令牌：0=空闲（可扫描） 2=扫描进行中
@@ -135,9 +137,7 @@ namespace BTitlesLocalizationPatch.Scan
                         // 此处已在主线程回调里，早已脱离 ModLoader.Load 的 try：
                         // 抛出去不会被标记归属模组、也不会自动禁用，只会变成主循环里的裸异常
                         // 所以只留一条 Error，不吞、不抛
-                        mod.Logger.Error(
-                            SafeFormat(Localize("ScanApplyFailed"), ex.Message)
-                        );
+                        mod.Logger.Error(SafeFormat(Localize("ScanApplyFailed"), ex.Message));
 
                         // ApplyWrites 是逐条写的，抛出时字典已被改了一半。
                         // 就地撤销本次全部写入：此刻还握着 writes 与 PreScanValues，
@@ -180,9 +180,7 @@ namespace BTitlesLocalizationPatch.Scan
             throw new BTitlesIncompatibleException("ScanTargetMissing", "BiomeDictionary");
         }
 
-        private static List<Func<Player, string>> ResolveCheckFunctions(
-            BiomeTitlesMod instance
-        )
+        private static List<Func<Player, string>> ResolveCheckFunctions(BiomeTitlesMod instance)
         {
             if (
                 BTitlesLocalizationPatch.CheckFuncsField?.GetValue(instance)
@@ -506,20 +504,12 @@ namespace BTitlesLocalizationPatch.Scan
                         string modName = sourceMod.Name;
                         string biomeName = biome.Name;
                         long now = DateTime.UtcNow.Ticks;
-                        long lastTicks = LastDetectionWarnTicks.GetOrAdd(
-                            (modName, biomeName),
-                            0L
-                        );
+                        long lastTicks = LastDetectionWarnTicks.GetOrAdd((modName, biomeName), 0L);
                         if (now - lastTicks >= DetectionWarnCooldown.Ticks)
                         {
                             LastDetectionWarnTicks[(modName, biomeName)] = now;
                             DebugLog.Warn(
-                                SafeFormat(
-                                    Localize("DetectionEx"),
-                                    modName,
-                                    biomeName,
-                                    ex.Message
-                                )
+                                SafeFormat(Localize("DetectionEx"), modName, biomeName, ex.Message)
                             );
                         }
                     }

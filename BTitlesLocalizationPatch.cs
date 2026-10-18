@@ -112,11 +112,7 @@ namespace BTitlesLocalizationPatch
         */
         private static void ValidateReflectionTargets()
         {
-            if (
-                _instanceField == null
-                || _biomeDictField == null
-                || _checkFuncsField == null
-            )
+            if (_instanceField == null || _biomeDictField == null || _checkFuncsField == null)
                 throw new BTitlesIncompatibleException("ScanTargetMissing");
         }
 
@@ -385,10 +381,7 @@ namespace BTitlesLocalizationPatch
         // 卸载本次扫描的成果：移除新增条目、还原被覆盖的已有条目，并清掉检测函数与扫描状态
         // mod 为 null 表示卸载途中实例已不可靠，不走 Mod.Logger
         // restoreMappedColors 只有 Unload 传 true：关扫描时配色表仍由 Hook 生效，不该顺手还原
-        internal static void UnregisterScannedBiomes(
-            Mod? mod,
-            bool restoreMappedColors = false
-        )
+        internal static void UnregisterScannedBiomes(Mod? mod, bool restoreMappedColors = false)
         {
             /*
             BTitles 的字典是本补丁的 detour 读取的共享状态，主线程每帧都可能遍历

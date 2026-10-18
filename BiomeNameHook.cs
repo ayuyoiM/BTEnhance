@@ -22,6 +22,7 @@ namespace BTitlesLocalizationPatch
             string,
             (string Text, string Tag)
         > TranslationCache = new();
+
         // 群系数量有限（数百级），超限清空重建即可，无需复杂淘汰策略
         private const int MaxCacheEntries = 2048;
         private static volatile string _lastCultureName = "";
@@ -42,8 +43,9 @@ namespace BTitlesLocalizationPatch
         否则手工配色一旦覆盖过 BTitles 内置条目（如「地狱」），改回表就再也恢复不了
         按引用比较：BiomeEntry 没重写 Equals，两个「值相等」的条目不是同一条
         */
-        private static readonly ConcurrentDictionary<BiomeEntry, Color> MappedOriginalColors =
-            new(BiomeEntryReferenceComparer.Instance);
+        private static readonly ConcurrentDictionary<BiomeEntry, Color> MappedOriginalColors = new(
+            BiomeEntryReferenceComparer.Instance
+        );
 
         /*
         卸载前把配色表改过的颜色还回去
@@ -281,7 +283,7 @@ namespace BTitlesLocalizationPatch
         localizationKey 形如 Mods.{modName}.Biomes.{key}.DisplayName —— 对真实模组
         （tML 强制内部名是合法 C# 标识符）modName 就是不带点的 safeScope 首段。
         - 模组没带 en-US 资产 / 键缺失 ⇒ 无法比对，退回旧的 ASCII 启发式行为
-          （这是显式保留的兼容分支：BTitles 的翻译也在，但不能凭空捏造「没译」结论，宁可保守）
+        （这是显式保留的兼容分支：BTitles 的翻译也在，但不能凭空捏造「没译」结论，宁可保守）
         - 仅在非 en-US 语言下被调用（调用点已由 shouldTranslate 保证）
         */
         private static bool IsEnglishFallbackValue(
@@ -463,7 +465,9 @@ namespace BTitlesLocalizationPatch
                             fileName,
                             out GameCulture? culture,
                             out string? prefix
-                        ) || culture?.Name != "en-US" || string.IsNullOrEmpty(prefix)
+                        )
+                        || culture?.Name != "en-US"
+                        || string.IsNullOrEmpty(prefix)
                     )
                     {
                         continue;

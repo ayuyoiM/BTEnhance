@@ -60,11 +60,13 @@ namespace BTitlesLocalizationPatch
         // 只统计进 ScanResult.Skipped
         // 属于扫描期判定，改口径后必须重扫，见 OnChanged
         [DefaultValue(true)]
-        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Label")]
-        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Tooltip")]
+        [LabelKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Label"
+        )]
+        [TooltipKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Tooltip"
+        )]
         public bool OnlyFillMissingBiomes { get; set; }
-
-
 
         private bool _lastAutoStyling;
         private bool _lastScan;
@@ -80,13 +82,19 @@ namespace BTitlesLocalizationPatch
         [Header("Styling")]
         [DefaultValue(true)]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Label")]
-        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Tooltip")]
+        [TooltipKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Tooltip"
+        )]
         public bool EnableAutoStyling { get; set; }
 
         // 标题配色策略，见 TitleColorSource 注释
         [DefaultValue(TitleColorSource.BackgroundColor)]
-        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Label")]
-        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Tooltip")]
+        [LabelKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Label"
+        )]
+        [TooltipKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Tooltip"
+        )]
         public TitleColorSource PreferredColorSource { get; set; }
 
         // Fixed 策略用的固定颜色；不参与 alpha（无边框/背景纯色）
@@ -101,7 +109,9 @@ namespace BTitlesLocalizationPatch
         这里不设默认值：空表就是「谁都不用」，与玩家手动清空表格的行为一致
         */
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.TitleColorMappings.Label")]
-        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.TitleColorMappings.Tooltip")]
+        [TooltipKey(
+            "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.TitleColorMappings.Tooltip"
+        )]
         public List<BiomeColorMapping> TitleColorMappings { get; set; } =
             new List<BiomeColorMapping>();
 
@@ -110,6 +120,7 @@ namespace BTitlesLocalizationPatch
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Tooltip")]
         public bool EnableDebugLog { get; set; }
+
         /*
         给配色表算一个廉价签名
         Save 一定触发 OnChanged，但拿不到「哪一项变了」，没法逐项比对；
