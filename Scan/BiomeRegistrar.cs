@@ -230,7 +230,9 @@ namespace BTitlesLocalizationPatch.Scan
                         // 没重写 IsBiomeActive 的占位群系（如嘉登实验室）注册了也检测不到
                         if (IsPlaceholderBiome(biome))
                         {
-                            mod.Logger.Info(
+                            // 逐条跳过日志走 DebugLog：与 SkippedExistingBiome 同为批量跳过明细，
+                            // 受「调试日志」开关控制，不淹没正常日志；总数在 ScanSummary 里已有
+                            DebugLog.Info(
                                 SafeFormat(
                                     Localize("SkippedPlaceholder"),
                                     biome.Name,
@@ -241,7 +243,6 @@ namespace BTitlesLocalizationPatch.Scan
                             continue;
                         }
 
-                        allBiomes.Add((targetMod, biome));
                         RegisterOrUpdateBiome(
                             biomeDict,
                             targetMod,
@@ -251,6 +252,7 @@ namespace BTitlesLocalizationPatch.Scan
                             colorSource,
                             fixedColor,
                             keyMapping,
+                            allBiomes,
                             scannedBiomes,
                             pendingWrites,
                             existingSnapshots,
@@ -309,6 +311,9 @@ namespace BTitlesLocalizationPatch.Scan
         再试 BTitles 短键兼容已有条目
         已有条目不动颜色/图标，那是 BTitles 或上一次扫描给的
         这里只登记写入意图，真正改字典在 ApplyWrites（主线程）
+        仅补漏跳过的条目不进 allBiomes：检测函数由本模组插在最前，若把 BTitles 已收录、
+        且字典里只有命名空间键的群系也放进去，lambda 回落返回短键会在字典里查不到，
+        BTitles 原本能显示的群系反而消失。allBiomes 只在确认被本模组追踪的分支登记
         */
         private static void RegisterOrUpdateBiome(
             Dictionary<string, BiomeEntry> biomeDict,
@@ -319,6 +324,7 @@ namespace BTitlesLocalizationPatch.Scan
             TitleColorSource colorSource,
             Color fixedColor,
             Dictionary<string, string> keyMapping,
+            List<(Mod Mod, ModBiome Biome)> allBiomes,
             List<(string DictKey, ModBiome Biome, bool IsNew)> scannedBiomes,
             List<PendingWrite> pendingWrites,
             Dictionary<string, ExistingEntrySnapshot> existingSnapshots,
@@ -358,6 +364,7 @@ namespace BTitlesLocalizationPatch.Scan
                 SnapshotExisting(namespacedKey, entry, existingSnapshots);
                 pendingWrites.Add(PendingWrite.Update(namespacedKey, title, targetMod.Name));
                 keyMapping[namespacedKey] = namespacedKey;
+                allBiomes.Add((targetMod, modBiome));
                 scannedBiomes.Add((namespacedKey, modBiome, false));
                 updated++;
                 return;
@@ -368,6 +375,7 @@ namespace BTitlesLocalizationPatch.Scan
                 SnapshotExisting(modBiome.Name, entry, existingSnapshots);
                 pendingWrites.Add(PendingWrite.Update(modBiome.Name, title, targetMod.Name));
                 keyMapping[namespacedKey] = modBiome.Name;
+                allBiomes.Add((targetMod, modBiome));
                 scannedBiomes.Add((modBiome.Name, modBiome, false));
                 updated++;
                 return;
@@ -383,6 +391,7 @@ namespace BTitlesLocalizationPatch.Scan
             );
             pendingWrites.Add(PendingWrite.Add(namespacedKey, newEntry, modBiome));
             keyMapping[namespacedKey] = namespacedKey;
+            allBiomes.Add((targetMod, modBiome));
             scannedBiomes.Add((namespacedKey, modBiome, true));
             added++;
 
@@ -619,7 +628,12 @@ namespace BTitlesLocalizationPatch.Scan
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                    DebugLog.Warn(
+                        SafeFormat(
+                            Localize("CleanupRemoveCheckFuncFailed"),
+                            ex.Message
+                        )
+                    );
                 }
             });
         }
@@ -654,7 +668,9 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                DebugLog.Warn(
+                    SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message)
+                );
                 return false;
             }
         }
@@ -680,7 +696,9 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                DebugLog.Warn($"Cleanup: failed to remove check func - {ex.Message}");
+                DebugLog.Warn(
+                    SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message)
+                );
                 return false;
             }
         }

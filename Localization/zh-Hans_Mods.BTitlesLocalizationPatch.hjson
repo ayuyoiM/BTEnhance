@@ -37,6 +37,8 @@ Logs: {
 	RescanOnOnlyFillMissing: 「仅补漏群系」已变更，正在先撤再扫……
 	RefreshUnavailable: 无法即时刷新当前标题（未取到 BTitles 的界面字段），新配色将在下次切换群系时生效
 	RefreshFailed: 刷新当前标题失败：{0}
+	HookDisposeFailed: 卸载 Hook 失败：{0}
+	CleanupRemoveCheckFuncFailed: 清理：移除检测函数失败 - {0}
 }
 
 SourceTags: {

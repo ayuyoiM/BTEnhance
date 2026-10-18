@@ -499,7 +499,7 @@ namespace BTitlesLocalizationPatch
             return result;
         }
 
-        // 展开解析后的 Hjson：叶子（非对象/数组）记为 key=value；数组一律跳过（本地化键不会是数组）
+        // 展开解析后的 Hjson：叶子（字符串等标量）记为 key=value；对象递归；数组一律跳过（本地化键不会是数组）
         private static void FlattenHjson(
             JsonValue value,
             string prefix,
@@ -512,6 +512,9 @@ namespace BTitlesLocalizationPatch
                     FlattenHjson(obj[key], $"{prefix}.{key}", into);
                 return;
             }
+            // 数组显式跳过：掉进下面的叶子分支会被 ToString() 成 "[...]" 整段文本记进对照表
+            if (value is JsonArray)
+                return;
             // 叶子：只有字符串才算本地化值（数字/布尔不是 DisplayName 场景，但也照记，代价可忽略）
             string? text = HjsonValueCheck(value);
             if (text != null && !into.ContainsKey(prefix))
@@ -537,18 +540,14 @@ namespace BTitlesLocalizationPatch
         /*
         取模组的 en-US 映射（懒构建 + 负缓存）。
         空表 = 该模组没带 en-US 资产或构建失败，后续一律退回旧的 ASCII 启发式
+        直接收 Mod 实例：调用方（IsEnglishFallbackValue）已持有实例，
+        闭包里再按 Name 线性回查 ModLoader.Mods 是白扫一遍
         */
-        private static IReadOnlyDictionary<string, string> GetEnUsMap(Mod mod)
-        {
-            return EnUsTranslationMaps.GetOrAdd(
+        private static IReadOnlyDictionary<string, string> GetEnUsMap(Mod mod) =>
+            EnUsTranslationMaps.GetOrAdd(
                 mod.Name,
-                static name =>
-                {
-                    Mod? target = ModLoader.Mods.FirstOrDefault(m => m.Name == name);
-                    return target != null ? BuildEnUsMap(target) : new Dictionary<string, string>();
-                }
+                _ => BuildEnUsMap(mod)
             );
-        }
 
         internal static void ResetEnUsMapCache() => EnUsTranslationMaps.Clear();
 

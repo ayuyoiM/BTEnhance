@@ -50,6 +50,7 @@ namespace BTitlesLocalizationPatch
 
             if (_loaded)
             {
+                // Load 阶段本地化值未填充，不能用本地化键，见 PROJECT.md「Load 阶段日志为何是英文字面量」
                 Logger.Warn("Mod Load called again, skipped");
                 return;
             }

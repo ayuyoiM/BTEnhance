@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using BTitles;
 using MonoMod.RuntimeDetour;
+using Terraria.Localization;
 using Terraria.ModLoader;
 
 namespace BTitlesLocalizationPatch
@@ -43,6 +44,7 @@ namespace BTitlesLocalizationPatch
                 >(BiomeNameHook.GetActualTitleNameHook)
             );
             BTitlesLocalizationPatch.HookInstalled = true;
+            // Load 阶段本地化值未填充，不能用本地化键，见 PROJECT.md「Load 阶段日志为何是英文字面量」
             mod.Logger.Info("GetActualTitleName Detour patch applied successfully");
         }
 
@@ -55,7 +57,12 @@ namespace BTitlesLocalizationPatch
             }
             catch (Exception ex)
             {
-                mod.Logger.Warn($"Hook Dispose failed: {ex.Message}");
+                mod.Logger.Warn(
+                    Language.GetTextValue(
+                        $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.HookDisposeFailed",
+                        ex.Message
+                    )
+                );
             }
             _getActualTitleNameHook = null;
             BTitlesLocalizationPatch.HookInstalled = false;

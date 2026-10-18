@@ -37,6 +37,8 @@ Logs: {
 	RescanOnOnlyFillMissing: Only-fill-missing changed, rescanning (unregister then scan)...
 	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
 	RefreshFailed: Failed to refresh the current title: {0}
+	HookDisposeFailed: Hook Dispose failed: {0}
+	CleanupRemoveCheckFuncFailed: Cleanup: failed to remove check func - {0}
 }
 
 SourceTags: {

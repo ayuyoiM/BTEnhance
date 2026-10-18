@@ -77,6 +77,23 @@ namespace BTitlesLocalizationPatch
         // 空表的签名是 0，初值也用 0：没动过表时不该平白触发一次全量重配色
         private int _lastMappingsSignature;
 
+        /*
+        tML 在注册期就会调一次 OnChanged（ConfigManager.Add，早于 Mod.Load，LoadCompleted 早退挡住），
+        但菜单保存（OnChangedAll）与游戏内保存触发时模组已加载，若 _last* 还停在 C# 默认值
+        （false / 透明黑），首轮必然把「默认开着」误判成「刚被打开」，平白跑一次扫描与全量重配色。
+        在 OnLoaded（Load 之后、任何有效 OnChanged 之前）把字段对齐到实际加载值，
+        兼容旧存档里非默认的取值，不硬编码 true
+        */
+        public override void OnLoaded()
+        {
+            _lastAutoStyling = EnableAutoStyling;
+            _lastScan = EnableScan;
+            _lastColorSource = PreferredColorSource;
+            _lastFixedColor = FixedTitleColor;
+            _lastOnlyFillMissing = OnlyFillMissingBiomes;
+            _lastMappingsSignature = ComputeMappingsSignature(TitleColorMappings);
+        }
+
         // 自动配色总开关：控制策略色的批量上色与图标采样；
         // 逐群系手工配色表也在它之下，关掉后整档不生效
         [Header("Styling")]
