@@ -1,9 +1,9 @@
-# Biome Titles Localization Patch
+# Biome Titles Enhance
 
 [![Steam](https://img.shields.io/badge/%E5%88%9B%E6%84%8F%E5%B7%A5%E5%9D%8A-Steam?style=flat-square&logo=Steam&label=Steam&color=%23000000)](https://steamcommunity.com/sharedfiles/filedetails/?id=3758079429)
 ![Steam Update Date](https://img.shields.io/steam/update-date/3758079429?style=flat-square&label=工坊更新时间)
 
-一个为 [Biome Titles（生物群系名称）](https://steamcommunity.com/sharedfiles/filedetails/?id=2992680615) 提供本地化增强的 tModLoader 模组。
+一个为 [Biome Titles（生物群系名称）](https://steamcommunity.com/sharedfiles/filedetails/?id=2992680615) 提供本地化与配色增强的 tModLoader 模组。
 
 Biome Titles 使用手动维护的方式收录群系名称
 本补丁通过挂钩标题解析流程，用自动化取代手动维护——直接从各模组的本地化文件中读取已翻译的名称
@@ -62,7 +62,7 @@ Biome Titles 使用手动维护的方式收录群系名称
 
 ## 配置说明
 
-在游戏内模组配置中找到「Biome Titles Localization Patch」即可调节：
+在游戏内模组配置中找到「Biome Titles Enhance（生物群系名称增强）」即可调节：
 
 | 配置项 | 默认值 | |
 | --- | :---: | --- |

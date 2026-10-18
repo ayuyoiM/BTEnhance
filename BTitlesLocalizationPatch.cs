@@ -144,7 +144,7 @@ namespace BTitlesLocalizationPatch
                         $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanEnabled"
                     )
                 );
-                Scan.BiomeRegistrar.Run(this, config.EnableAutoStyling);
+                Scan.BiomeRegistrar.Run(this);
             }
             else if (config.EnableAutoStyling)
             {
@@ -159,6 +159,12 @@ namespace BTitlesLocalizationPatch
         {
             // 立即同步 Hook 的样式开关缓存，避免 3 秒冷却期内采样逻辑读到旧值
             BiomeNameHook.UpdateStylingCache(enabled);
+
+            /*
+            配色表的快照必须在这里失效：玩家刚存完表，下一次 Hook 就要读到新值
+            配色开关也走这条路径（表受它门控），一并失效不会多花什么
+            */
+            Scan.BiomeStyleHelper.InvalidateMappingSnapshot();
 
             // 配色不依赖标题 Hook，早退会让已上色的条目撤不掉；Load 之前反射字段还是 null，见 LoadCompleted
             if (!LoadCompleted)
@@ -295,15 +301,25 @@ namespace BTitlesLocalizationPatch
             }
         }
 
-        internal static void ApplyConfigChangeScan(bool enabled)
+        /*
+        扫描类配置回调的公共前置：三个入口原先各抄一遍同一段
+        「确认已加载 → 丢翻译缓存 → 取 mod 实例 → 取不到就什么都不做」
+        抄三遍的坏处不是难看，是将来加一条前置（比如再清一份缓存）必定漏掉其中一处
+        配色回调不走这里：它不需要丢翻译缓存，见 ApplyConfigChangeStyle
+        */
+        private static BTitlesLocalizationPatch? BeginScanConfigChange()
         {
             // 扫描与检测函数注册都不依赖标题 Hook，早退会把注册过的群系留在字典里撤不掉
             if (!LoadCompleted)
-                return;
+                return null;
 
             BiomeNameHook.TranslationCache.Clear();
+            return ModContent.GetInstance<BTitlesLocalizationPatch>();
+        }
 
-            var mod = ModContent.GetInstance<BTitlesLocalizationPatch>();
+        internal static void ApplyConfigChangeScan(bool enabled)
+        {
+            var mod = BeginScanConfigChange();
             if (mod == null)
                 return;
 
@@ -325,7 +341,7 @@ namespace BTitlesLocalizationPatch
                             $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.ScanToggleOn"
                         )
                     );
-                    Scan.BiomeRegistrar.Run(mod, config.EnableAutoStyling);
+                    Scan.BiomeRegistrar.Run(mod);
                 }
             }
             else
@@ -346,20 +362,14 @@ namespace BTitlesLocalizationPatch
         */
         internal static void ApplyConfigChangeOnlyFillMissing()
         {
-            if (!LoadCompleted)
-                return;
-
-            var config = ModContent.GetInstance<BTitlesConfig>();
-            // 扫描没开就没有结果可撤，也没必要平白起一次扫描
-            if (config == null || !config.EnableScan)
-                return;
-
-            var mod = ModContent.GetInstance<BTitlesLocalizationPatch>();
+            var mod = BeginScanConfigChange();
             if (mod == null)
                 return;
 
-            // 撤净等于换了世界状态，链条缓存要一起丢
-            BiomeNameHook.TranslationCache.Clear();
+            // 扫描没开就没有结果可撤，也没必要平白起一次扫描
+            var config = ModContent.GetInstance<BTitlesConfig>();
+            if (config == null || !config.EnableScan)
+                return;
 
             UnregisterScannedBiomes(mod);
 
@@ -369,12 +379,16 @@ namespace BTitlesLocalizationPatch
                 )
             );
 
-            Scan.BiomeRegistrar.Run(mod, config.EnableAutoStyling);
+            Scan.BiomeRegistrar.Run(mod);
         }
 
         // 卸载本次扫描的成果：移除新增条目、还原被覆盖的已有条目，并清掉检测函数与扫描状态
         // mod 为 null 表示卸载途中实例已不可靠，不走 Mod.Logger
-        internal static void UnregisterScannedBiomes(Mod? mod)
+        // restoreMappedColors 只有 Unload 传 true：关扫描时配色表仍由 Hook 生效，不该顺手还原
+        internal static void UnregisterScannedBiomes(
+            Mod? mod,
+            bool restoreMappedColors = false
+        )
         {
             /*
             BTitles 的字典是本补丁的 detour 读取的共享状态，主线程每帧都可能遍历
@@ -388,7 +402,7 @@ namespace BTitlesLocalizationPatch
             {
                 try
                 {
-                    Main.RunOnMainThread(() => UnregisterScannedBiomes(mod))
+                    Main.RunOnMainThread(() => UnregisterScannedBiomes(mod, restoreMappedColors))
                         .GetAwaiter()
                         .GetResult();
                     return;
@@ -407,6 +421,15 @@ namespace BTitlesLocalizationPatch
                     return;
                 }
             }
+
+            /*
+            配色表改过的颜色也在这里还回去：它写的是 BTitles 字典里条目的 TitleColor，
+            与下面的快照还原是同一份共享状态，必须在主线程做
+            放在快照还原之前：快照里存的是扫描前的基准色，先还原映射色再覆盖，
+            两者都写同一个字段，顺序反了会把刚还原的基准值再抹掉
+            */
+            if (restoreMappedColors)
+                BiomeNameHook.RestoreMappedColors();
 
             var instance = InstanceField?.GetValue(null);
             var biomeDict =
@@ -477,14 +500,15 @@ namespace BTitlesLocalizationPatch
             BiomeNameHook.ResetStylingCache();
             BiomeNameHook.ResetCultureCache();
             BiomeNameHook.ResetEnUsMapCache();
-            // 配色表覆盖过的颜色必须还回 BTitles 字典，卸载后没有 Hook 再替它还原
-            BiomeNameHook.RestoreMappedColors();
+            // 配色表快照指向的是配置对象里的字符串，卸载后配置会被回收，留着就是悬挂引用
+            Scan.BiomeStyleHelper.InvalidateMappingSnapshot();
 
             GetActualTitleNameHookInstaller.Uninstall(this);
 
             // 必须撤字典：BTitles 不随本模组卸载，只清记录会让它的字典留下带不走的孤儿条目
             // 传 null：卸载途中不再走 Mod.Logger
-            UnregisterScannedBiomes(null);
+            // 配色表的还原也一并交给它：那同样是写 BTitles 字典，得在主线程做
+            UnregisterScannedBiomes(null, restoreMappedColors: true);
 
             _instanceField = null;
             _biomeDictField = null;

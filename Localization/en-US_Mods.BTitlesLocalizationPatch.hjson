@@ -64,7 +64,11 @@ Configs: {
 
 		EnableAutoStyling: {
 			Label: Color Scheme
-			Tooltip: Assign title colors to newly added biomes
+			Tooltip:
+				'''
+				Assign title colors to the biomes the scan covers.
+				Also the master switch for per-biome title colors: turning it off disables the whole color table.
+				'''
 		}
 
 		EnableDebugLog: {
@@ -75,12 +79,12 @@ Configs: {
 		PreferredColorSource: {
 			Label: Color source
 			Tooltip:
-			'''
-			Where the title color comes from.
-			- BackgroundColor: use the biome's background color, fall back to icon sampling;
-			- IconSampling: always sample the dominant color from the icon;
-			- Fixed: always use the fixed color below
-			'''
+				'''
+				Where the title color comes from.
+				- BackgroundColor: use the color the biome declares for its bestiary background, sample the icon when it declares none.
+				- IconSampling: sample the dominant color from the icon; biomes whose icon failed to load stay white;
+				- Fixed: always use the fixed color below
+				'''
 		}
 
 		FixedTitleColor: {
@@ -95,23 +99,23 @@ Configs: {
 
 		TitleColorMappings: {
 			Label: Per-biome title colors
-			Tooltip: 
-			'''
-			Override the color source for specific biomes,
-			matched against the title as it is displayed on screen.
-			A match wins over the color source above
-			'''
+			Tooltip:
+				'''
+				Override the color source for specific biomes,
+				matched against the title as it is displayed on screen.
+				A match wins over the color source above
+				'''
 		}
 	}
 
 	BiomeColorMapping: {
 		Title: {
 			Label: Title text
-			Tooltip: 
-			'''
-			The biome title exactly as it appears on screen
-			(in the current language)
-			'''
+			Tooltip:
+				'''
+				The biome title exactly as it appears on screen
+				(in the current language)
+				'''
 		}
 
 		Color: {
@@ -127,13 +131,17 @@ Configs: {
 			Label: Background color
 			Tooltip: Prefer the biome's declared background color
 		}
+
 		IconSampling: {
 			Label: Icon sampling
 			Tooltip: Always sample the dominant color from the biome icon
 		}
+
 		Fixed: {
 			Label: Fixed color
 			Tooltip: Always use the fixed color chosen below
 		}
+
+		Tooltip: ""
 	}
 }

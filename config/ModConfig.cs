@@ -33,7 +33,13 @@ namespace BTitlesLocalizationPatch
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Title.Tooltip")]
         public string Title { get; set; } = "";
 
-        // 默认 Color 是 (0,0,0,0)，当作「还没填」处理，见 BiomeStyleHelper.TryGetMappedColor
+        /*
+        默认不透明白而不是 (0,0,0,0)：ColorNoAlpha 只是把 A 滑条藏起来，
+        tML 不会替我们写 255（ColorElement.cs:136 只做 skip.Add(A)），
+        于是玩家拖完 RGB 得到的仍是 alpha=0，标题会整个看不见
+        给一个不透明的默认值，未填与已填才有明确分界
+        */
+        [DefaultValue(typeof(Color), "255,255,255,255")]
         [ColorNoAlpha]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Tooltip")]
@@ -45,7 +51,7 @@ namespace BTitlesLocalizationPatch
         public override ConfigScope Mode => ConfigScope.ClientSide;
 
         [Header("Scan")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableScan.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableScan.Tooltip")]
         public bool EnableScan { get; set; }
@@ -53,16 +59,12 @@ namespace BTitlesLocalizationPatch
         // 开启后扫描只补漏：BTitles 字典里已存在的条目完全不动（不覆写标题/作用域、不配色、不做快照、不排队写入），
         // 只统计进 ScanResult.Skipped
         // 属于扫描期判定，改口径后必须重扫，见 OnChanged
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.OnlyFillMissingBiomes.Tooltip")]
         public bool OnlyFillMissingBiomes { get; set; }
 
-        [Header("Debug")]
-        [DefaultValue(false)]
-        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Label")]
-        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Tooltip")]
-        public bool EnableDebugLog { get; set; }
+
 
         private bool _lastAutoStyling;
         private bool _lastScan;
@@ -76,7 +78,7 @@ namespace BTitlesLocalizationPatch
         // 自动配色总开关：控制策略色的批量上色与图标采样；
         // 逐群系手工配色表也在它之下，关掉后整档不生效
         [Header("Styling")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableAutoStyling.Tooltip")]
         public bool EnableAutoStyling { get; set; }
@@ -103,6 +105,11 @@ namespace BTitlesLocalizationPatch
         public List<BiomeColorMapping> TitleColorMappings { get; set; } =
             new List<BiomeColorMapping>();
 
+        [Header("Debug")]
+        [DefaultValue(false)]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.EnableDebugLog.Tooltip")]
+        public bool EnableDebugLog { get; set; }
         /*
         给配色表算一个廉价签名
         Save 一定触发 OnChanged，但拿不到「哪一项变了」，没法逐项比对；

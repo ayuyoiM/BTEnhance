@@ -64,7 +64,11 @@ Configs: {
 
 		EnableAutoStyling: {
 			Label: 配色
-			Tooltip: 为新增的群系分配标题颜色
+			Tooltip:
+				'''
+				为扫描涉及的群系自动设置标题颜色。
+				同时是逐群系配色表的总开关：关掉后整张表一并失效。
+				'''
 		}
 
 		EnableDebugLog: {
@@ -75,12 +79,12 @@ Configs: {
 		PreferredColorSource: {
 			Label: 颜色来源
 			Tooltip:
-			'''
-			标题颜色的来源。
-			- 背景色：优先用群系声明的背景色，缺失时回退图标采样；
-			- 图标采样：总是从图标采主色；
-			- 固定颜色：总是用下方选定的固定颜色
-			'''
+				'''
+				标题颜色的来源。
+				- 背景色：用群系为图鉴背景声明的颜色，没声明时采图标主色。
+				- 图标采样：从图标采主色；图标加载失败的群系保持白色；
+				- 固定颜色：总是用下方选定的固定颜色
+				'''
 		}
 
 		FixedTitleColor: {
@@ -96,22 +100,22 @@ Configs: {
 		TitleColorMappings: {
 			Label: 逐群系标题颜色
 			Tooltip:
-			'''
-			为指定群系覆盖颜色来源，
-			按屏幕上实际显示的标题名匹配，
-			命中优先于上方「颜色来源」
-			'''
+				'''
+				为指定群系覆盖颜色来源，
+				按屏幕上实际显示的标题名匹配，
+				命中优先于上方「颜色来源」
+				'''
 		}
 	}
 
 	BiomeColorMapping: {
 		Title: {
 			Label: 标题文字
-			Tooltip: 
-			'''
-			屏幕上实际显示的群系标题
-			（当前语言下的样子）
-			'''
+			Tooltip:
+				'''
+				屏幕上实际显示的群系标题
+				（当前语言下的样子）
+				'''
 		}
 
 		Color: {
@@ -127,13 +131,17 @@ Configs: {
 			Label: 背景色
 			Tooltip: 优先使用群系声明的背景色
 		}
+
 		IconSampling: {
 			Label: 图标采样
 			Tooltip: 总是从群系图标采样主色
 		}
+
 		Fixed: {
 			Label: 固定颜色
 			Tooltip: 总是使用下方选定的固定颜色
 		}
+
+		// Tooltip: ""
 	}
 }

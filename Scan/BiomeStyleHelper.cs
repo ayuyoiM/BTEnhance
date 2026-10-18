@@ -30,9 +30,81 @@ namespace BTitlesLocalizationPatch.Scan
         }
 
         /*
+        配色表的只读快照：条目在读取时就把「不透明 + 跳过未填」算好
+        Hook 每次显示标题都会走到 TryGetMappedColor，原实现每次都要 GetInstance 再扫一遍表；
+        表本身只在保存配置时变，所以按「保存即失效」缓存一份拍平的数组
+        失效由 ApplyConfigChangeStyle / Unload 显式触发（见 InvalidateMappingSnapshot），
+        不像 StylingCache 那样按时间冷却：配色表改完要立刻生效，不能有 3 秒的旧值窗口
+        */
+        private static volatile MappingEntry[] _mappingSnapshot = Array.Empty<MappingEntry>();
+
+        // 空表也要缓存（否则每次命中都要重建一次空数组），所以另用一个标志区分「没建过」与「建过且为空」
+        private static volatile bool _mappingSnapshotBuilt;
+
+        private readonly struct MappingEntry
+        {
+            public readonly string Title;
+            public readonly Color Color;
+
+            public MappingEntry(string title, Color color)
+            {
+                Title = title;
+                Color = color;
+            }
+        }
+
+        private static MappingEntry[] GetMappingSnapshot()
+        {
+            if (_mappingSnapshotBuilt)
+                return _mappingSnapshot;
+
+            var mappings = ModContent.GetInstance<BTitlesConfig>()?.TitleColorMappings;
+            if (mappings == null || mappings.Count == 0)
+            {
+                _mappingSnapshot = Array.Empty<MappingEntry>();
+                _mappingSnapshotBuilt = true;
+                return _mappingSnapshot;
+            }
+
+            var built = new List<MappingEntry>(mappings.Count);
+            foreach (var mapping in mappings)
+            {
+                if (mapping == null || string.IsNullOrEmpty(mapping.Title))
+                    continue;
+
+                // alpha 为 0 当作「还没填」：标题色带 alpha 只会让它整个看不见，没有别的语义
+                if (mapping.Color.A == 0)
+                    continue;
+
+                // UI 不编辑 alpha（[ColorNoAlpha]），字段里的 A 不可信，一律按不透明上色
+                built.Add(
+                    new MappingEntry(
+                        mapping.Title,
+                        new Color(mapping.Color.R, mapping.Color.G, mapping.Color.B, (byte)255)
+                    )
+                );
+            }
+
+            // 先填数组再置标志：反过来会短暂暴露「已建好但内容是空数组」的中间态
+            _mappingSnapshot = built.Count == 0 ? Array.Empty<MappingEntry>() : built.ToArray();
+            _mappingSnapshotBuilt = true;
+            return _mappingSnapshot;
+        }
+
+        /*
+        配色表变更或卸载时清掉快照
+        空表也缓存（缓存的空数组同样表示「不用再查」），所以失效只能靠这个显式调用
+        */
+        internal static void InvalidateMappingSnapshot()
+        {
+            _mappingSnapshot = Array.Empty<MappingEntry>();
+            _mappingSnapshotBuilt = false;
+        }
+
+        /*
         逐群系配色表：按玩家看得见的标题名精确匹配（区分大小写，不做模糊）
         名字是玩家自己填的，与屏幕上的字不一致时宁可匹配不上，也不要猜错群系
-        配置未加载、表为空、或该项颜色还没填（默认全零）时返回 false，调用方沿用策略色
+        配置未加载、表为空、或该项颜色还没填（alpha 仍为 0）时返回 false，调用方沿用策略色
         */
         public static bool TryGetMappedColor(string? displayTitle, out Color color)
         {
@@ -40,22 +112,13 @@ namespace BTitlesLocalizationPatch.Scan
             if (string.IsNullOrEmpty(displayTitle))
                 return false;
 
-            var mappings = ModContent.GetInstance<BTitlesConfig>()?.TitleColorMappings;
-            if (mappings == null || mappings.Count == 0)
-                return false;
-
-            // 表一般是几条到几十条，线性扫描足够，不值得为它建字典与失效逻辑
-            foreach (var mapping in mappings)
+            // 表一般是几条到几十条，线性扫描足够，不值得为它建字典
+            foreach (var entry in GetMappingSnapshot())
             {
-                if (mapping == null || mapping.Title != displayTitle)
+                if (entry.Title != displayTitle)
                     continue;
 
-                // 刚加进表还没选颜色时是 (0,0,0,0)：alpha 为 0 会让标题整个看不见，当作没配
-                // 用 continue 而不是 return false：同名条目可能不止一条，后面那条也许填了颜色
-                if (mapping.Color == default)
-                    continue;
-
-                color = mapping.Color;
+                color = entry.Color;
                 return true;
             }
 

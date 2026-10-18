@@ -43,7 +43,7 @@ namespace BTitlesLocalizationPatch
         按引用比较：BiomeEntry 没重写 Equals，两个「值相等」的条目不是同一条
         */
         private static readonly ConcurrentDictionary<BiomeEntry, Color> MappedOriginalColors =
-            new(BiomeRegistrar.BiomeEntryReferenceComparer.Instance);
+            new(BiomeEntryReferenceComparer.Instance);
 
         /*
         卸载前把配色表改过的颜色还回去

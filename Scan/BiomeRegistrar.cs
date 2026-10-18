@@ -42,9 +42,14 @@ namespace BTitlesLocalizationPatch.Scan
         // 单靠 ScannedBiomes != null 是读-判-写，两个线程可能同时通过
         private static int _scanState;
 
-        public static void Run(Mod mod, bool enableStyling)
+        /*
+        配色开关不从这里传参：Hook 层判定用的是 BiomeNameHook.IsStylingEnabled()，
+        若扫描侧另收一份，两者就有两个真相，配置回调里的 UpdateStylingCache 一慢半拍就会各说各话
+        统一从缓存读，调用方不必也不该再带一份
+        */
+        public static void Run(Mod mod)
         {
-            enableStyling = BiomeNameHook.IsStylingEnabled();
+            bool enableStyling = BiomeNameHook.IsStylingEnabled();
             bool onlyFillMissing = IsOnlyFillMissing();
             (var colorSource, var fixedColor) = BiomeStyleHelper.GetStylingSettings();
 
@@ -334,14 +339,15 @@ namespace BTitlesLocalizationPatch.Scan
 
             就完全不动 —— 不快照、不覆写标题/作用域、不排队写入、不进 scannedBiomes
             只计入 Skipped。BTitles 自己的条目保持原样
-            逐条记日志：开了这个开关后玩家最想知道的就是「到底哪些被跳过了」，
-            只给一个总数等于没说
+            逐条记日志，但走 DebugLog（受调试开关控制）：开这个开关时被跳过的条目可能有上百条，
+            无脑写进 tModLoader.log 会把正常日志淹掉；「跳过了多少」在 ScanSummary 里已有总数，
+            逐条明细属于排查用的调试信息
             */
             if (onlyFillMissing)
             {
                 if (biomeDict.ContainsKey(namespacedKey) || biomeDict.ContainsKey(modBiome.Name))
                 {
-                    mod.Logger.Info(
+                    DebugLog.Info(
                         SafeFormat(Localize("SkippedExistingBiome"), modBiome.Name, title)
                     );
                     skipped++;
@@ -746,18 +752,5 @@ namespace BTitlesLocalizationPatch.Scan
             Color TitleColor,
             Texture2D? Icon
         );
-
-        // BiomeEntry 没重写 Equals，这里仍显式按引用比较，
-        // 避免将来上游重写后，待补色集合把两个「值相等」的条目当成同一个
-        // 内部可见：BiomeNameHook 的配色表原色表也用同一套比较语义
-        internal sealed class BiomeEntryReferenceComparer : IEqualityComparer<BiomeEntry>
-        {
-            public static readonly BiomeEntryReferenceComparer Instance = new();
-
-            public bool Equals(BiomeEntry? x, BiomeEntry? y) => ReferenceEquals(x, y);
-
-            public int GetHashCode(BiomeEntry obj) =>
-                System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-        }
     }
 }

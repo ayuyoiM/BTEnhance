@@ -1,6 +1,6 @@
 author = Mio
 displayName = Biome Titles Enhance
-displayName.zh-Hans = 生物群系名称增强
+displayName.zh-Hans = 生物群系标题增强
 includeSource = false
 modReferences = BTitles
 side = Client
