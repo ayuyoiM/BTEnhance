@@ -628,12 +628,7 @@ namespace BTitlesLocalizationPatch.Scan
                 }
                 catch (Exception ex)
                 {
-                    DebugLog.Warn(
-                        SafeFormat(
-                            Localize("CleanupRemoveCheckFuncFailed"),
-                            ex.Message
-                        )
-                    );
+                    DebugLog.Warn(SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message));
                 }
             });
         }
@@ -668,9 +663,7 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                DebugLog.Warn(
-                    SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message)
-                );
+                DebugLog.Warn(SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message));
                 return false;
             }
         }
@@ -696,9 +689,7 @@ namespace BTitlesLocalizationPatch.Scan
             }
             catch (Exception ex)
             {
-                DebugLog.Warn(
-                    SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message)
-                );
+                DebugLog.Warn(SafeFormat(Localize("CleanupRemoveCheckFuncFailed"), ex.Message));
                 return false;
             }
         }

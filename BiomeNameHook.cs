@@ -544,10 +544,7 @@ namespace BTitlesLocalizationPatch
         闭包里再按 Name 线性回查 ModLoader.Mods 是白扫一遍
         */
         private static IReadOnlyDictionary<string, string> GetEnUsMap(Mod mod) =>
-            EnUsTranslationMaps.GetOrAdd(
-                mod.Name,
-                _ => BuildEnUsMap(mod)
-            );
+            EnUsTranslationMaps.GetOrAdd(mod.Name, _ => BuildEnUsMap(mod));
 
         internal static void ResetEnUsMapCache() => EnUsTranslationMaps.Clear();
 
