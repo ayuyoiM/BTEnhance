@@ -6,12 +6,13 @@ using BTitlesLocalizationPatch.Diagnostics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
+using Terraria;
 using Terraria.Localization;
 using Terraria.ModLoader;
 
 namespace BTitlesLocalizationPatch.Scan
 {
-    // 配色与图标工具：BackgroundColor 读取、图标加载、主色采样
+    // 配色与图标工具：BackgroundColor 读取、图标加载、代表性颜色采样
     internal static class BiomeStyleHelper
     {
         /*
@@ -130,7 +131,7 @@ namespace BTitlesLocalizationPatch.Scan
         采样由 BiomeNameHook（主线程）执行，后台线程不可调用 Texture2D.GetData
         策略语义：
         - Fixed：一律返回用户挑的固定颜色，不采样
-        - IconSampling：一律登记采样（不管有没有背景色），初始白色占位，主线程补 icon 众数
+        - IconSampling：一律登记采样（不管有没有背景色），初始白色占位，主线程补图标平均色
         - BackgroundColor（默认 = 旧行为）：有背景色用背景色，否则白色 + 采样
         */
         public static Color GetTitleColors(
@@ -190,14 +191,34 @@ namespace BTitlesLocalizationPatch.Scan
             }
         }
 
-        // 采样上限：图标一般远小于此，超大图取这个规模也足够反映主色
+        // 采样上限：图标一般远小于此，超大图取这个规模也足够反映代表性颜色
         private const int MaxSampleSize = 256;
 
+        // 低于这个色度（三通道极差）的像素视为灰调：描边、阴影、单色背景多落在这里
+        private const int MinChroma = 24;
+
         /*
-        从整个图标采样，返回出现次数最多的颜色（众数）
-        像素先量化到 32 级色块（RGB555）再统计，避免抗锯齿噪点把众数打散
+        平均色的饱和度增益
+        众数会挑中最纯的那个色块，平均则被大量相近像素稀释；不往饱和方向推一点，
+        深色群系的标题会变成一片莫兰迪灰。系数保守，推过头会变成刺眼的荧光色
         */
-        public static Color SampleDominantColor(Texture2D icon)
+        private const float SaturationBoost = 1.35f;
+
+        /*
+        亮度下限（HSL 的 L，0..1）
+        平均色天然比众数暗：众数会挑中某个饱和的亮色块，平均则被同一主体的暗部拉低。
+        深色群系的图标尤其明显，直接当标题字色会糊在背景里
+        只抬 L、不动 H 与 S，颜色不会偏色相，也不会因为提亮而褪成粉白
+        */
+        private const float MinLightness = 0.5f;
+
+        /*
+        从整个图标采样，返回所有有效像素的平均色（代表性颜色）
+        与众数的区别：众数挑「面积最大的那个纯色块」，容易被大块背景与边框主导；
+        平均把主体和渐变一起算进去，更接近图标给人的整体印象
+        为了不让平均变浑，先剔除三类像素：半透明、接近纯黑纯白、灰调
+        */
+        public static Color SampleRepresentativeColor(Texture2D icon)
         {
             if (icon == null || icon.IsDisposed || icon.Width <= 1 || icon.Height <= 1)
                 return Color.Gray;
@@ -234,9 +255,10 @@ namespace BTitlesLocalizationPatch.Scan
                 return Color.Gray;
             }
 
-            var colorFrequency = new Dictionary<int, int>();
-            int highestFrequency = 0;
-            Color mostCommonColor = Color.Gray;
+            long sumR = 0,
+                sumG = 0,
+                sumB = 0;
+            int validCount = 0;
 
             // 处理段必须同样以 pixelCount 为界，不能整个 span 走完借来的数组
             foreach (ref Color pixel in pixels.AsSpan(0, pixelCount))
@@ -249,26 +271,49 @@ namespace BTitlesLocalizationPatch.Scan
                 if (brightness < 30 || brightness > 720)
                     continue;
 
-                int colorKey = (pixel.R >> 3) << 10 | (pixel.G >> 3) << 5 | (pixel.B >> 3);
-                colorFrequency.TryGetValue(colorKey, out int currentCount);
-                currentCount++;
-                colorFrequency[colorKey] = currentCount;
+                // 跳过灰调：三通道几乎相等时它对「这团颜色是什么色」没有信息量，
+                // 却常常是图标里面积最大的部分，留着会把平均色整体拉向灰
+                int max = Math.Max(pixel.R, Math.Max(pixel.G, pixel.B));
+                int min = Math.Min(pixel.R, Math.Min(pixel.G, pixel.B));
+                if (max - min < MinChroma)
+                    continue;
 
-                if (currentCount > highestFrequency)
-                {
-                    highestFrequency = currentCount;
-                    // 量化丢掉了低 3 位，还原时每级左移 3 位再 +4 取色块中点
-                    mostCommonColor = new Color(
-                        (byte)(((colorKey >> 10) & 0x1F) << 3 | 4),
-                        (byte)(((colorKey >> 5) & 0x1F) << 3 | 4),
-                        (byte)((colorKey & 0x1F) << 3 | 4)
-                    );
-                }
+                sumR += pixel.R;
+                sumG += pixel.G;
+                sumB += pixel.B;
+                validCount++;
             }
 
             // 借来的数组必须归还，否则每次采样都会泄漏一份 256KB
             ArrayPool<Color>.Shared.Return(pixels);
-            return highestFrequency > 0 ? mostCommonColor : Color.Gray;
+
+            // 全是灰调/半透明/极端亮度：这个图标给不出颜色，交给调用方的灰色兜底
+            if (validCount == 0)
+                return Color.Gray;
+
+            var average = new Color(
+                (byte)(sumR / validCount),
+                (byte)(sumG / validCount),
+                (byte)(sumB / validCount)
+            );
+            return BoostSaturation(average);
+        }
+
+        /*
+        把颜色往饱和、明亮的方向推，色相保持不变
+        平均色天生偏灰也偏暗：同一主体的明暗像素互相抵消，得到的饱和度低于任何一个原始像素，
+        亮度则被暗部拉向中间。HSL 是现成的，两个量各调各的，互不影响
+        */
+        private static Color BoostSaturation(Color color)
+        {
+            Vector3 hsl = Main.rgbToHsl(color);
+            hsl.Y = MathHelper.Clamp(hsl.Y * SaturationBoost, 0f, 1f);
+            // 只抬下限，不压上限：本来就亮的颜色保持原样
+            hsl.Z = Math.Max(hsl.Z, MinLightness);
+            Color boosted = Main.hslToRgb(hsl.X, hsl.Y, hsl.Z);
+            // hslToRgb 不保留 alpha，统一按不透明返回（标题色带 alpha 只会让它看不见）
+            boosted.A = 255;
+            return boosted;
         }
     }
 }

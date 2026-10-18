@@ -442,7 +442,7 @@ namespace BTitlesLocalizationPatch.Scan
                     fixedColor,
                     out bool needsSampling
                 );
-                // 待补色（策略为 IconSampling 或没有背景色），登记进来等主线程用图标众数补
+                // 待补色（策略为 IconSampling 或没有背景色），登记进来等主线程用图标平均色补
                 // 配色整档关闭时不登记：那里只落白色
                 if (needsSampling)
                     PendingColorKeys[entry] = 0;

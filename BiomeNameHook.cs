@@ -150,7 +150,7 @@ namespace BTitlesLocalizationPatch
             }
 
             // 只有登记在 PendingColorKeys 的条目才补色：已按策略直接取到颜色的，
-            // 以及关配色时留下的白色，都不该被图标众数覆盖
+            // 以及关配色时留下的白色，都不该被图标平均色覆盖
             if (
                 IsStylingEnabled()
                 && BiomeRegistrar.PendingColorKeys.ContainsKey(biomeEntry)
@@ -165,7 +165,9 @@ namespace BTitlesLocalizationPatch
 
                 if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
                 {
-                    biomeEntry.TitleColor = BiomeStyleHelper.SampleDominantColor(biomeEntry.Icon);
+                    biomeEntry.TitleColor = BiomeStyleHelper.SampleRepresentativeColor(
+                        biomeEntry.Icon
+                    );
                     // 出队，避免每帧重复采样
                     BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
                 }

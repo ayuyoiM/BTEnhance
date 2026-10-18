@@ -270,7 +270,7 @@ namespace BTitlesLocalizationPatch
                         fixedColor,
                         out bool needsSampling
                     );
-                    // 采样策略下总是登记待补色队列，等 Hook 用图标众数补上
+                    // 采样策略下总是登记待补色队列，等 Hook 用图标平均色补上
                     if (needsSampling)
                         Scan.BiomeRegistrar.PendingColorKeys[entry] = 0;
                     else

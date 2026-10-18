@@ -24,7 +24,7 @@ Logs: {
 	RestoredBiomes: 已还原 {0} 个已有群系的原标题
 	FormatError: 格式化日志模板失败：模板="{0}" 错误={1}
 	CacheReadFailed: 读取配置 [{0}] 失败，沿用上一次缓存值：{1}
-	SampleColorFailed: 从图标 （{0}x{1}） 采样主色失败：{2}
+	SampleColorFailed: 从图标 （{0}x{1}） 采样代表性颜色失败：{2}
 	NativeTitleFailed: BTitles 原生标题解析失败：群系 [{0}]，错误={1}
 	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
 	HookMethodMissing: 找不到 BTitles 的 BiomeTitlesUI.GetActualTitleName 方法，补丁无法工作，已拒绝加载
@@ -82,7 +82,7 @@ Configs: {
 				'''
 				标题颜色的来源。
 				- 背景色：用群系为图鉴背景声明的颜色，没声明时采图标主色。
-				- 图标采样：从图标采主色；图标加载失败的群系保持白色；
+				- 图标采样：从图标采代表性颜色（有效像素的平均色）；图标加载失败的群系保持白色；
 				- 固定颜色：总是用下方选定的固定颜色
 				'''
 		}
@@ -134,7 +134,7 @@ Configs: {
 
 		IconSampling: {
 			Label: 图标采样
-			Tooltip: 总是从群系图标采样主色
+			Tooltip: 总是从群系图标采样代表性颜色
 		}
 
 		Fixed: {

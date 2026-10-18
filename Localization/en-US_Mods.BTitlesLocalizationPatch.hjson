@@ -82,7 +82,7 @@ Configs: {
 				'''
 				Where the title color comes from.
 				- BackgroundColor: use the color the biome declares for its bestiary background, sample the icon when it declares none.
-				- IconSampling: sample the dominant color from the icon; biomes whose icon failed to load stay white;
+				- IconSampling: sample the representative color from the icon (the average of its valid pixels); biomes whose icon failed to load stay white;
 				- Fixed: always use the fixed color below
 				'''
 		}
@@ -134,7 +134,7 @@ Configs: {
 
 		IconSampling: {
 			Label: Icon sampling
-			Tooltip: Always sample the dominant color from the biome icon
+			Tooltip: Always sample the representative color from the biome icon
 		}
 
 		Fixed: {
