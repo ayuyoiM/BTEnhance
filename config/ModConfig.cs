@@ -29,6 +29,9 @@ namespace BTitlesLocalizationPatch
     玩家填的是自己屏幕上看到的那行字，眼见为实，零成本配置
     命中后覆盖 PreferredColorSource 给出的策略色
     */
+    // 列表项默认折叠：配色表往往几十条，全展开会把整页撑长，找一条得滚半天
+    // tML 的 ObjectElement 对列表元素读的是「元素类型」上的 Expand 特性（ObjectElement.cs:131-136）
+    [Expand(false)]
     public class BiomeColorMapping
     {
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Title.Label")]
@@ -36,16 +39,22 @@ namespace BTitlesLocalizationPatch
         public string Title { get; set; } = "";
 
         /*
-        默认不透明白而不是 (0,0,0,0)：ColorNoAlpha 只是把 A 滑条藏起来，
-        tML 不会替我们写 255（ColorElement.cs:136 只做 skip.Add(A)），
-        于是玩家拖完 RGB 得到的仍是 alpha=0，标题会整个看不见
-        给一个不透明的默认值，未填与已填才有明确分界
+        A 通道完全放开：滑条可见，填什么就用什么（半透明标题、淡出效果都交给玩家）
+        默认值仍是不透明白，未填与已填靠 (0,0,0,0) 区分——全零才算「还没填」，
+        只把 alpha 拖到 0 的彩色条目是玩家有意为之，照用
         */
         [DefaultValue(typeof(Color), "255,255,255,255")]
-        [ColorNoAlpha]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeColorMapping.Color.Tooltip")]
         public Color Color { get; set; }
+
+        /*
+        列表折叠时显示「序号: 标题文字」，而不是光秃秃的「序号:」
+        tML 的 ObjectElement.OnBind 只在元素类型重写了 ToString 时才把值拼上去
+        （ObjectElement.cs:52-61），没重写就只剩序号，看不出这条配的是哪个群系
+        未填标题时留空，让序号后面干干净净
+        */
+        public override string ToString() => Title ?? "";
     }
 
     public class BTitlesConfig : ModConfig
@@ -116,9 +125,8 @@ namespace BTitlesLocalizationPatch
         )]
         public TitleColorSource PreferredColorSource { get; set; }
 
-        // Fixed 策略用的固定颜色；不参与 alpha（无边框/背景纯色）
+        // Fixed 策略用的固定颜色；alpha 同样放开，由玩家决定不透明度
         [DefaultValue(typeof(Color), "255,255,255,255")]
-        [ColorNoAlpha]
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FixedTitleColor.Label")]
         [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FixedTitleColor.Tooltip")]
         public Color FixedTitleColor { get; set; }

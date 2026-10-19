@@ -39,6 +39,8 @@ Logs: {
 	RefreshFailed: 刷新当前标题失败：{0}
 	HookDisposeFailed: 卸载 Hook 失败：{0}
 	CleanupRemoveCheckFuncFailed: 清理：移除检测函数失败 - {0}
+	RetranslatedTitles: 语言已切换：重译了 {0} 个群系标题
+	RetranslateFailed: 重译群系标题失败：{0}
 }
 
 SourceTags: {
@@ -113,16 +115,12 @@ Configs: {
 
 	BiomeColorMapping: {
 		Title: {
-			Label: 标题文字
-			Tooltip:
-				'''
-				屏幕上实际显示的群系标题
-				（当前语言下的样子）
-				'''
+			Label: 群系标题
+			Tooltip: 实际显示的群系标题
 		}
 
 		Color: {
-			Label: 标题颜色
+			Label: 群系标题颜色
 			Tooltip: 该标题使用的颜色
 		}
 
@@ -135,6 +133,11 @@ Configs: {
 			Tooltip: 只使用群系声明的背景色，没有时为纯白（不采样）
 		}
 
+		BackgroundColorSampling: {
+			Label: 背景色优先
+			Tooltip: 优先使用群系声明的背景色；没有背景色或背景色是白色时，使用图标采样
+		}
+
 		IconSampling: {
 			Label: 图标采样
 			Tooltip: 总是从群系图标采样代表性颜色
@@ -143,11 +146,6 @@ Configs: {
 		Fixed: {
 			Label: 固定颜色
 			Tooltip: 总是使用下方选定的固定颜色
-		}
-
-		BackgroundColorSampling: {
-			Label: 背景色优先
-			Tooltip: 优先使用群系声明的背景色；没有背景色或背景色是白色时，使用图标采样
 		}
 
 		// Tooltip: ""

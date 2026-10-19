@@ -195,9 +195,10 @@ namespace BTitlesLocalizationPatch
         让 BTitles 重算一次当前标题的显示属性
         BTitles 只在群系切换（CheckNewBiome 里 newBiome != _currentBiome）时才调 SetupTitleVisuals，
         配置变更不会触发 —— 不推这一把，改完配色表要等走出再走回群系才看得到效果
+        语言切换同理（见 Scan/LanguageChangeSystem.cs），故对同程序集开放为 internal
         方法名可能随上游版本变化：取不到就退化成「下次切换生效」，只告警一次，不影响功能
         */
-        private static void RefreshCurrentTitle()
+        internal static void RefreshCurrentTitle()
         {
             if (!Program.IsMainThread)
                 return;

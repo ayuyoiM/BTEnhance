@@ -73,17 +73,12 @@ namespace BTitlesLocalizationPatch.Scan
                 if (mapping == null || string.IsNullOrEmpty(mapping.Title))
                     continue;
 
-                // alpha 为 0 当作「还没填」：标题色带 alpha 只会让它整个看不见，没有别的语义
-                if (mapping.Color.A == 0)
+                // 只有全零 (0,0,0,0) 才算「还没填」：单把 alpha 拖到 0 的彩色条目是玩家有意为之
+                if (mapping.Color == default)
                     continue;
 
-                // UI 不编辑 alpha（[ColorNoAlpha]），字段里的 A 不可信，一律按不透明上色
-                built.Add(
-                    new MappingEntry(
-                        mapping.Title,
-                        new Color(mapping.Color.R, mapping.Color.G, mapping.Color.B, (byte)255)
-                    )
-                );
+                // alpha 原样保留：UI 已放开 A 滑条，半透明标题是合法需求
+                built.Add(new MappingEntry(mapping.Title, mapping.Color));
             }
 
             // 先填数组再置标志：反过来会短暂暴露「已建好但内容是空数组」的中间态
@@ -105,7 +100,7 @@ namespace BTitlesLocalizationPatch.Scan
         /*
         逐群系配色表：按玩家看得见的标题名精确匹配（区分大小写，不做模糊）
         名字是玩家自己填的，与屏幕上的字不一致时宁可匹配不上，也不要猜错群系
-        配置未加载、表为空、或该项颜色还没填（alpha 仍为 0）时返回 false，调用方沿用策略色
+        配置未加载、表为空、或该项颜色还没填（全零 (0,0,0,0)）时返回 false，调用方沿用策略色
         */
         public static bool TryGetMappedColor(string? displayTitle, out Color color)
         {

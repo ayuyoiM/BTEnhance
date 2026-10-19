@@ -39,6 +39,8 @@ Logs: {
 	RefreshFailed: Failed to refresh the current title: {0}
 	HookDisposeFailed: Hook Dispose failed: {0}
 	CleanupRemoveCheckFuncFailed: Cleanup: failed to remove check func - {0}
+	RetranslatedTitles: Language changed: retranslated {0} biome title(s)
+	RetranslateFailed: Failed to retranslate biome titles: {0}
 }
 
 SourceTags: {
@@ -113,11 +115,7 @@ Configs: {
 	BiomeColorMapping: {
 		Title: {
 			Label: Title text
-			Tooltip:
-				'''
-				The biome title exactly as it appears on screen
-				(in the current language)
-				'''
+			Tooltip: The biome title exactly as it appears on screen
 		}
 
 		Color: {
@@ -135,7 +133,7 @@ Configs: {
 		}
 
 		BackgroundColorSampling: {
-			Label: Background first, icon fallback
+			Label: Background first
 			Tooltip: Prefer the biome's declared background color; fall back to icon sampling when it is missing or white
 		}
 
@@ -148,8 +146,6 @@ Configs: {
 			Label: Fixed color
 			Tooltip: Always use the fixed color chosen below
 		}
-
-
 
 		Tooltip: ""
 	}
