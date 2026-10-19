@@ -9,7 +9,8 @@ namespace BTitlesLocalizationPatch
 {
     /*
     标题颜色策略
-    - BackgroundColor：默认。优先用模组声明的 BackgroundColor，没有则白色并登记图标采样（旧行为）
+    - BackgroundColor：默认。只用模组声明的 BackgroundColor，没有则白色，不采样
+    - BackgroundColorSampling：背景色优先；没有背景色或背景色是白色时使用图标采样
     - IconSampling：总是从图标采代表性颜色（主线程），初始白色占位
     - Fixed：始终用用户指定的 FixedTitleColor
     枚举成员的中文标签走 tML 自动注册键：Mods.BTitlesLocalizationPatch.Configs.TitleColorSource.{成员}.Label
@@ -17,6 +18,7 @@ namespace BTitlesLocalizationPatch
     public enum TitleColorSource
     {
         BackgroundColor,
+        BackgroundColorSampling,
         IconSampling,
         Fixed,
     }
@@ -105,7 +107,7 @@ namespace BTitlesLocalizationPatch
         public bool EnableAutoStyling { get; set; }
 
         // 标题配色策略，见 TitleColorSource 注释
-        [DefaultValue(TitleColorSource.BackgroundColor)]
+        [DefaultValue(TitleColorSource.BackgroundColorSampling)]
         [LabelKey(
             "$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.PreferredColorSource.Label"
         )]

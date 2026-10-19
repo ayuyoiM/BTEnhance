@@ -476,6 +476,10 @@ namespace BTitlesLocalizationPatch.Scan
                 if (write.Entry != null)
                 {
                     write.Entry.Icon = BiomeStyleHelper.TryLoadIcon(write.Biome);
+                    // 图标加载失败就别占补色队列：留在 PendingColorKeys 里永远不会被补上，
+                    // 还会被 ScanSummary 计成「未配色」；真有图标了下次扫描会重新登记
+                    if (write.Entry.Icon == null)
+                        PendingColorKeys.TryRemove(write.Entry, out _);
                     biomeDict[write.DictKey] = write.Entry;
                 }
                 else if (biomeDict.TryGetValue(write.DictKey, out var entry))

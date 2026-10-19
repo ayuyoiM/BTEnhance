@@ -132,7 +132,8 @@ namespace BTitlesLocalizationPatch.Scan
         策略语义：
         - Fixed：一律返回用户挑的固定颜色，不采样
         - IconSampling：一律登记采样（不管有没有背景色），初始白色占位，主线程补图标平均色
-        - BackgroundColor（默认 = 旧行为）：有背景色用背景色，否则白色 + 采样
+        - BackgroundColor（默认）：只用背景色，没有则纯白，不采样
+        - BackgroundColorSampling：背景色优先；没有背景色或背景色是白色时回落图标采样
         */
         public static Color GetTitleColors(
             ModBiome? biome,
@@ -155,10 +156,20 @@ namespace BTitlesLocalizationPatch.Scan
                 return Color.White;
             }
 
+            if (source == TitleColorSource.BackgroundColorSampling)
+            {
+                // 背景色优先；没有背景色或背景色就是白色时，回落图标采样
+                if (biome.BackgroundColor.HasValue && biome.BackgroundColor.Value != Color.White)
+                    return biome.BackgroundColor.Value;
+
+                needsSampling = true;
+                return Color.White;
+            }
+
+            // BackgroundColor：只用背景色，没有则纯白，不采样
             if (biome.BackgroundColor.HasValue)
                 return biome.BackgroundColor.Value;
 
-            needsSampling = true;
             return Color.White;
         }
 

@@ -83,7 +83,7 @@ Configs: {
 			Tooltip:
 				'''
 				Where the title color comes from.
-				- BackgroundColor: use the color the biome declares for its bestiary background, sample the icon when it declares none.
+				- BackgroundColor: use the color the biome declares for its bestiary background.
 				- IconSampling: sample the representative color from the icon (the average of its valid pixels); biomes whose icon failed to load stay white;
 				- Fixed: always use the fixed color below
 				'''
@@ -131,7 +131,7 @@ Configs: {
 	TitleColorSource: {
 		BackgroundColor: {
 			Label: Background color
-			Tooltip: Prefer the biome's declared background color
+			Tooltip: Use only the biome's declared background color; pure white when absent
 		}
 
 		IconSampling: {
@@ -142,6 +142,11 @@ Configs: {
 		Fixed: {
 			Label: Fixed color
 			Tooltip: Always use the fixed color chosen below
+		}
+
+		BackgroundColorSampling: {
+			Label: Background first, icon fallback
+			Tooltip: Prefer the biome's declared background color; fall back to icon sampling when it is missing or white
 		}
 
 		Tooltip: ""

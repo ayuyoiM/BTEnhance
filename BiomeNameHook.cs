@@ -114,6 +114,39 @@ namespace BTitlesLocalizationPatch
         }
 
         /*
+        图标补色：只有登记在 PendingColorKeys 的条目才补——已按策略直接取到颜色的，
+        以及关配色时留下的白色，都不该被图标平均色覆盖
+        采样成功即出队，避免每帧重复采样；图标缺失/释放则留在队列，等图标可用再补
+        必须在翻译缓存命中判断之前调用：缓存命中路径不经过后面的解析链，
+        漏调会导致切颜色来源后补色被缓存早退短路，标题一直白色
+        */
+        private static void TryBackfillColor(BiomeEntry biomeEntry)
+        {
+            if (
+                !IsStylingEnabled()
+                || !BiomeRegistrar.PendingColorKeys.ContainsKey(biomeEntry)
+                || biomeEntry.Icon == null
+            )
+            {
+                return;
+            }
+
+            // 热重载后图标可能已释放
+            if (biomeEntry.Icon.IsDisposed)
+            {
+                biomeEntry.Icon = TryReloadIcon(biomeEntry.Key);
+            }
+
+            if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
+            {
+                biomeEntry.TitleColor = BiomeStyleHelper.SampleRepresentativeColor(
+                    biomeEntry.Icon
+                );
+                BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
+            }
+        }
+
+        /*
         原来的整条解析链原样搬到这里：5 步查找、缓存、图标补色都在这一层
         抽出来是为了让 Hook 能在拿到最终字符串之后再动颜色 ——
         配色表按「看得见的名字」匹配，链上任何一个中间 return 都还不是最终值
@@ -140,6 +173,10 @@ namespace BTitlesLocalizationPatch
                 TranslationCache.Clear();
             }
 
+            // 补色放在缓存判断之前：缓存命中路径也要补色，
+            // 否则切颜色来源后 TranslationCache 未清，补色块被缓存早退短路，标题一直白色
+            TryBackfillColor(biomeEntry);
+
             if (hasValidKey && TranslationCache.TryGetValue(cacheKey, out var cachedEntry))
             {
                 string displayName =
@@ -147,30 +184,6 @@ namespace BTitlesLocalizationPatch
                 string sourceTag = displayName == cachedEntry.Text ? cachedEntry.Tag : "CustomName";
                 LogBiomeEntry(biomeEntry.Key ?? "", displayName, biomeEntry, sourceTag);
                 return displayName;
-            }
-
-            // 只有登记在 PendingColorKeys 的条目才补色：已按策略直接取到颜色的，
-            // 以及关配色时留下的白色，都不该被图标平均色覆盖
-            if (
-                IsStylingEnabled()
-                && BiomeRegistrar.PendingColorKeys.ContainsKey(biomeEntry)
-                && biomeEntry.Icon != null
-            )
-            {
-                // 热重载后图标可能已释放
-                if (biomeEntry.Icon.IsDisposed)
-                {
-                    biomeEntry.Icon = TryReloadIcon(biomeEntry.Key);
-                }
-
-                if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
-                {
-                    biomeEntry.TitleColor = BiomeStyleHelper.SampleRepresentativeColor(
-                        biomeEntry.Icon
-                    );
-                    // 出队，避免每帧重复采样
-                    BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
-                }
             }
 
             string? baseText = null;
