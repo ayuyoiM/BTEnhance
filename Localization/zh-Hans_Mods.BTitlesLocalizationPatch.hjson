@@ -1,12 +1,11 @@
 ExtraTitles.Terraria.Aether: 以太
 
 Logs: {
-	// 调试
+	// Debug
 	BiomeColor: RGB（{0},{1},{2}）
 	BiomeDetail: 源={0} 图标={1} 翻译来源={2}
 	BiomeEntry: 群系：Key={0} 标题={1}
-
-	// 错误
+	// Errors
 	CacheReadFailed: 读取配置 [{0}] 失败，沿用上一次缓存值：{1}
 	CleanupRemoveCheckFuncFailed: 清理：移除检测函数失败 - {0}
 	ConfigNull: 未获取到配置实例，扫描已跳过
@@ -18,11 +17,10 @@ Logs: {
 	HookDisposeFailed: 卸载 Hook 失败：{0}
 	HookMethodMissing: 找不到BTitles的BiomeTitlesUI.GetActualTitleName 方法，补丁无法工作，已拒绝加载
 	IconLoadFailed: 加载群系 [{0}] 的图标时失败: {1}
-	// 图标
+	// Icons
 	IconNull: 无
 	IconPresent: 有（{0}x{1}）
-
-	// 功能
+	// Features
 	NativeTitleFailed: BTitles原生标题解析失败：群系 [{0}]，错误={1}
 	NewBiome: 新增群系: [{0}] → {1}{2}
 	RefreshFailed: 刷新当前标题失败：{0}
@@ -35,8 +33,7 @@ Logs: {
 	RetranslatedTitles: 语言已切换：重译了 {0} 个群系标题
 	RetranslateFailed: 重译群系标题失败：{0}
 	SampleColorFailed: 从图标 （{0}x{1}） 采样代表性颜色失败：{2}
-
-	// 扫描
+	// Scan
 	ScanApplyFailed: 提交扫描结果时出错：{0}
 	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
 	ScanEnabled: 已启用扫描新群系，开始扫描……
@@ -46,14 +43,12 @@ Logs: {
 	ScanTargetMissing: 找不到BTitles的扫描目标，补丁无法工作，已拒绝加载
 	ScanToggleOff: 已禁用扫描，卸载已注册的群系
 	ScanToggleOn: 已启用扫描，开始扫描
-
-	// 跳过
+	// Skipped
 	SkippedByBlacklist: 已跳过黑名单群系：[{0}] → {1}
 	SkippedByWhitelist: 已跳过白名单外群系：[{0}] → {1}
 	SkippedExistingBiome: 已跳过已有群系：[{0}] → {1}（BTitles 已收录）
 	SkippedPlaceholder: 跳过占位群系: [{0}] → {1}（未重写检测方法）
-
-	// 卸载
+	// Unload
 	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
 	UnregisteredBiomes: 已从字典卸载 {0} 个群系
 }

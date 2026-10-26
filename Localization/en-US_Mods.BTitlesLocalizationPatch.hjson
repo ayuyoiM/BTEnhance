@@ -5,7 +5,6 @@ Logs: {
 	BiomeColor: RGB({0},{1},{2})
 	BiomeDetail: Scope={0} Icon={1} Source={2}
 	BiomeEntry: Biome: Key={0} Title={1}
-
 	// Errors
 	CacheReadFailed: Failed to read config [{0}], keeping the last cached value: {1}
 	CleanupRemoveCheckFuncFailed: Cleanup: failed to remove check func - {0}
@@ -21,7 +20,6 @@ Logs: {
 	// Icons
 	IconNull: no
 	IconPresent: yes ({0}x{1})
-
 	// Features
 	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
 	NewBiome: New biome: [{0}] → {1}{2}
@@ -35,7 +33,6 @@ Logs: {
 	RetranslatedTitles: Language changed: retranslated {0} biome title(s)
 	RetranslateFailed: Failed to retranslate biome titles: {0}
 	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
-
 	// Scan
 	ScanApplyFailed: Failed to apply scan result: {0}
 	ScanConfigNull: BTitlesConfig is null, scan toggle ON skipped
@@ -46,13 +43,11 @@ Logs: {
 	ScanTargetMissing: BTitles scan target not found; the patch cannot work and refused to load
 	ScanToggleOff: Scan disabled, unregistering registered biomes
 	ScanToggleOn: Scan enabled, starting scan
-
 	// Skipped
 	SkippedByBlacklist: Skipped blacklisted biome: [{0}] → {1}
 	SkippedByWhitelist: Skipped biome not in whitelist: [{0}] → {1}
 	SkippedExistingBiome: Skipped existing biome: [{0}] → {1} (already in BTitles)
 	SkippedPlaceholder: Skipped placeholder biome: [{0}] → {1} (no IsBiomeActive override)
-
 	// Unload
 	UnloadHopFailed: Main-thread hop failed during unload ({0}); biomes left in BTitles dictionary
 	UnregisteredBiomes: Unregistered {0} biome(s) from the dictionary
