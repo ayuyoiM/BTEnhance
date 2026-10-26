@@ -1,49 +1,61 @@
 ExtraTitles.Terraria.Aether: Aether
 
 Logs: {
-	ScanEnabled: Biome auto-scan enabled, starting scan...
-	BiomeEntry: Biome: Key={0} Title={1}
-	BiomeDetail: Scope={0} Icon={1} Source={2}
-	IconPresent: yes({0}x{1})
-	IconNull: no
-	CustomOverride: Custom override: {0} → {1}
-	ConfigNull: BTitlesConfig is null, scan skipped
-	DetectionEx: Exception detecting {0}.{1}: {2}
+	// Debug
 	BiomeColor: RGB({0},{1},{2})
-	IconLoadFailed: Failed to load icon for biome [{0}]: {1}
-	NewBiome: New: {0} → {1}{2}
-	DefaultColorMarker: (default color)
-	ScanningMod: Scanning mod [{0}] with {1} ModBiomes
-	SkippedPlaceholder: Skipped placeholder biome: [{0}] {1} (no IsBiomeActive override)
-	ScanSummary: Scan done: {0} added({5} pending color), {1} updated, {2} skipped | {3} entries, {4} checks
-	ScanToggleOn: Scan toggled ON, starting scan...
-	ScanToggleOff: Scan toggled OFF, unregistering scanned biomes...
-	RestyledOn: Restyled {0} biomes (auto-styling ON)
-	RestyledOff: Reset colors for {0} biomes (auto-styling OFF)
-	UnregisteredBiomes: Scan disabled: unregistered {0} biome(s) from dictionary
-	RestoredBiomes: Restored original titles for {0} existing biome(s)
-	FormatError: Failed to format log template: template="{0}" error={1}
+	BiomeDetail: Scope={0} Icon={1} Source={2}
+	BiomeEntry: Biome: Key={0} Title={1}
+
+	// Errors
 	CacheReadFailed: Failed to read config [{0}], keeping the last cached value: {1}
-	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
-	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
-	ScanConfigNull: BTitlesConfig is null, scan toggle ON skipped
-	HookMethodMissing: BiomeTitlesUI.GetActualTitleName not found; the patch cannot work and refused to load
-	ScanTargetMissing: BTitles scan target not found; the patch cannot work and refused to load
-	ScanFailed: Biome scan failed, registration could not complete; the patch refused to load
-	ScanApplyFailed: Failed to apply scan result: {0}
-	UnloadHopFailed: Main-thread hop failed during unload ({0}); biomes left in BTitles dictionary
-	EnUsMapFailed: Failed to build en-US source map for mod [{0}]: {1}
-	SkippedExistingBiome: Skipped existing biome: [{0}] → {1} (already registered by BTitles)
-	SkippedByBlacklist: Skipped blacklisted biome: [{0}] → {1}
-	SkippedByWhitelist: Skipped biome not in whitelist: [{0}] → {1}
-	RescanOnOnlyFillMissing: Only-fill-missing changed, rescanning (unregister then scan)...
-	RescanOnFilterChanged: List settings changed, rescanning (unregister then scan)...
-	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
-	RefreshFailed: Failed to refresh the current title: {0}
-	HookDisposeFailed: Hook Dispose failed: {0}
 	CleanupRemoveCheckFuncFailed: Cleanup: failed to remove check func - {0}
+	ConfigNull: BTitlesConfig is null, scan skipped
+	CustomOverride: Custom override: {0} → {1}
+	DefaultColorMarker: (default color)
+	DetectionEx: Exception detecting {0}.{1}: {2}
+	EnUsMapFailed: Failed to build en-US source map for mod [{0}]: {1}
+	FormatError: Failed to format log template: template="{0}" error={1}
+	HookDisposeFailed: Hook Dispose failed: {0}
+	HookMethodMissing: BiomeTitlesUI.GetActualTitleName not found; the patch cannot work and refused to load
+	IconLoadFailed: Failed to load icon for biome [{0}]: {1}
+	// Icons
+	IconNull: no
+	IconPresent: yes ({0}x{1})
+
+	// Features
+	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
+	NewBiome: New biome: [{0}] → {1}{2}
+	RefreshFailed: Failed to refresh the current title: {0}
+	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
+	RescanOnFilterChanged: List settings changed, rescanning
+	RescanOnOnlyFillMissing: Only fill missing changed, rescanning
+	RestoredBiomes: Restored original titles for {0} existing biome(s)
+	RestyledOff: Reset colors for {0} biomes
+	RestyledOn: Restyled {0} biomes
 	RetranslatedTitles: Language changed: retranslated {0} biome title(s)
 	RetranslateFailed: Failed to retranslate biome titles: {0}
+	SampleColorFailed: Failed to sample color from icon ({0}x{1}): {2}
+
+	// Scan
+	ScanApplyFailed: Failed to apply scan result: {0}
+	ScanConfigNull: BTitlesConfig is null, scan toggle ON skipped
+	ScanEnabled: Biome auto-scan enabled, starting scan...
+	ScanFailed: Biome scan failed, registration could not complete; the patch refused to load
+	ScanningMod: Scanning mod [{0}] with {1} ModBiomes
+	ScanSummary: Scan done: {0} added ({5} pending color), {1} updated, {2} skipped | {3} entries, {4} checks
+	ScanTargetMissing: BTitles scan target not found; the patch cannot work and refused to load
+	ScanToggleOff: Scan disabled, unregistering registered biomes
+	ScanToggleOn: Scan enabled, starting scan
+
+	// Skipped
+	SkippedByBlacklist: Skipped blacklisted biome: [{0}] → {1}
+	SkippedByWhitelist: Skipped biome not in whitelist: [{0}] → {1}
+	SkippedExistingBiome: Skipped existing biome: [{0}] → {1} (already in BTitles)
+	SkippedPlaceholder: Skipped placeholder biome: [{0}] → {1} (no IsBiomeActive override)
+
+	// Unload
+	UnloadHopFailed: Main-thread hop failed during unload ({0}); biomes left in BTitles dictionary
+	UnregisteredBiomes: Unregistered {0} biome(s) from the dictionary
 }
 
 SourceTags: {
@@ -100,8 +112,8 @@ Configs: {
 		}
 
 		OnlyFillMissingBiomes: {
-			Label: Only fill missing biomes
-			Tooltip: When enabled, scanning never touches biomes already registered by BTitles: no title overwrite, no styling, no snapshot
+			Label: Only biomes not added by "Biome Titles"
+			Tooltip: When enabled, scanning never touches biomes already registered by "Biome Titles": no title overwrite, no styling, no snapshot
 		}
 
 		FilterMode: {
@@ -109,7 +121,7 @@ Configs: {
 			Tooltip:
 				'''
 				How the "List" below is used.
-				- Disabled: the list has no effect (its contents are kept)
+				- Disabled: the list is not used
 				- Blacklist: biomes in the list are not scanned
 				- Whitelist: only biomes in the list are scanned (an empty list scans everything)
 				'''
@@ -162,17 +174,17 @@ Configs: {
 	ScanFilterMode: {
 		Disabled: {
 			Label: Disabled
-			Tooltip: No list is used; every biome is scanned as usual
+			Tooltip: No list is used; all biomes are scanned
 		}
 
 		Blacklist: {
 			Label: Blacklist
-			Tooltip: Skip only the biomes in the blacklist; everything else is scanned
+			Tooltip: Only biomes in the blacklist are skipped and no longer shown; the rest are scanned as usual
 		}
 
 		Whitelist: {
 			Label: Whitelist
-			Tooltip: Scan only the biomes in the whitelist; an empty whitelist scans everything
+			Tooltip: Only biomes in the whitelist are scanned, the rest are skipped; an empty whitelist scans every biome
 		}
 
 		Tooltip: ""

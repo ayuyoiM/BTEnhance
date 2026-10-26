@@ -1,55 +1,67 @@
 ExtraTitles.Terraria.Aether: 以太
 
 Logs: {
-	ScanEnabled: 已启用扫描新群系，开始扫描……
-	BiomeEntry: 群系：Key={0} 标题={1}
-	BiomeDetail: 源={0} 图标={1} 翻译来源={2}
-	IconPresent: 有（{0}x{1}）
-	IconNull: 无
-	CustomOverride: 自定义覆盖：{0} → {1}
-	ConfigNull: 未获取到配置实例，扫描已跳过
-	DetectionEx: 检测 [{0}] 模组的 [{1}] 群系时出错: {2}
+	// 调试
 	BiomeColor: RGB（{0},{1},{2}）
-	IconLoadFailed: 加载群系 [{0}] 的图标时失败: {1}
-	NewBiome: 新增群系: [{0}] → {1}{2}
-	DefaultColorMarker: （未配色）
-	ScanningMod: 正在扫描模组 [{0}]，发现 {1} 个模组群系
-	SkippedPlaceholder: 跳过占位群系: [{0}] → {1}（未重写检测方法）
-	ScanSummary: 扫描完毕：{0} 新增（{5} 个群系未配色），{1} 更新，{2} 跳过 | 字典 {3} 项，检测 {4} 个
-	ScanToggleOn: 已启用扫描，开始扫描……
-	ScanToggleOff: 已禁用扫描，卸载已注册的群系……
-	RestyledOn: 已配色 {0} 个群系
-	RestyledOff: 已重置 {0} 个群系的颜色
-	UnregisteredBiomes: 已从字典卸载 {0} 个群系
-	RestoredBiomes: 已还原 {0} 个已有群系的原标题
-	FormatError: 格式化日志模板失败：模板="{0}" 错误={1}
+	BiomeDetail: 源={0} 图标={1} 翻译来源={2}
+	BiomeEntry: 群系：Key={0} 标题={1}
+
+	// 错误
 	CacheReadFailed: 读取配置 [{0}] 失败，沿用上一次缓存值：{1}
-	SampleColorFailed: 从图标 （{0}x{1}） 采样代表性颜色失败：{2}
-	NativeTitleFailed: BTitles 原生标题解析失败：群系 [{0}]，错误={1}
-	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
-	HookMethodMissing: 找不到 BTitles 的 BiomeTitlesUI.GetActualTitleName 方法，补丁无法工作，已拒绝加载
-	ScanTargetMissing: 找不到 BTitles 的扫描目标，补丁无法工作，已拒绝加载
-	ScanFailed: 扫描群系时出错，补丁无法完成注册，已拒绝加载
-	ScanApplyFailed: 提交扫描结果时出错：{0}
-	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
-	EnUsMapFailed: 构建模组 [{0}] 的 en-US 源文案表失败：{1}
-	SkippedExistingBiome: 已跳过已有群系: [{0}] → {1}（BTitles 已收录）
-	SkippedByBlacklist: 已跳过黑名单群系: [{0}] → {1}
-	SkippedByWhitelist: 已跳过白名单外群系: [{0}] → {1}
-	RescanOnOnlyFillMissing: “仅补漏群系”已变更，正在先撤再扫……
-	RescanOnFilterChanged: 名单设置已变更，正在先撤再扫……
-	RefreshUnavailable: 无法即时刷新当前标题（未取到 BTitles 的界面字段），新配色将在下次切换群系时生效
-	RefreshFailed: 刷新当前标题失败：{0}
-	HookDisposeFailed: 卸载 Hook 失败：{0}
 	CleanupRemoveCheckFuncFailed: 清理：移除检测函数失败 - {0}
+	ConfigNull: 未获取到配置实例，扫描已跳过
+	CustomOverride: 自定义覆盖：{0} → {1}
+	DefaultColorMarker: （未配色）
+	DetectionEx: 检测 [{0}] 模组的 [{1}] 群系时出错: {2}
+	EnUsMapFailed: 构建模组 [{0}] 的 en-US 源文案表失败：{1}
+	FormatError: 格式化日志模板失败：模板="{0}" 错误={1}
+	HookDisposeFailed: 卸载 Hook 失败：{0}
+	HookMethodMissing: 找不到BTitles的BiomeTitlesUI.GetActualTitleName 方法，补丁无法工作，已拒绝加载
+	IconLoadFailed: 加载群系 [{0}] 的图标时失败: {1}
+	// 图标
+	IconNull: 无
+	IconPresent: 有（{0}x{1}）
+
+	// 功能
+	NativeTitleFailed: BTitles原生标题解析失败：群系 [{0}]，错误={1}
+	NewBiome: 新增群系: [{0}] → {1}{2}
+	RefreshFailed: 刷新当前标题失败：{0}
+	RefreshUnavailable: 无法即时刷新当前标题（未取到 BTitles 的界面字段），新配色将在下次切换群系时生效
+	RescanOnFilterChanged: 名单设置已变更，正在重新扫描
+	RescanOnOnlyFillMissing: “仅补漏群系”已变更，正在重新扫描
+	RestoredBiomes: 已还原 {0} 个已有群系的原标题
+	RestyledOff: 已重置 {0} 个群系的颜色
+	RestyledOn: 已配色 {0} 个群系
 	RetranslatedTitles: 语言已切换：重译了 {0} 个群系标题
 	RetranslateFailed: 重译群系标题失败：{0}
+	SampleColorFailed: 从图标 （{0}x{1}） 采样代表性颜色失败：{2}
+
+	// 扫描
+	ScanApplyFailed: 提交扫描结果时出错：{0}
+	ScanConfigNull: 未获取到配置实例，扫描启用操作已跳过
+	ScanEnabled: 已启用扫描新群系，开始扫描……
+	ScanFailed: 扫描群系时出错，补丁无法完成注册，已拒绝加载
+	ScanningMod: 正在扫描模组 [{0}]，发现 {1} 个模组群系
+	ScanSummary: 扫描完毕：新增{0}个（{5} 个群系未配色），更新{1}个，跳过{2}个 | 字典{3}项，检测{4}个
+	ScanTargetMissing: 找不到BTitles的扫描目标，补丁无法工作，已拒绝加载
+	ScanToggleOff: 已禁用扫描，卸载已注册的群系
+	ScanToggleOn: 已启用扫描，开始扫描
+
+	// 跳过
+	SkippedByBlacklist: 已跳过黑名单群系：[{0}] → {1}
+	SkippedByWhitelist: 已跳过白名单外群系：[{0}] → {1}
+	SkippedExistingBiome: 已跳过已有群系：[{0}] → {1}（BTitles 已收录）
+	SkippedPlaceholder: 跳过占位群系: [{0}] → {1}（未重写检测方法）
+
+	// 卸载
+	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
+	UnregisteredBiomes: 已从字典卸载 {0} 个群系
 }
 
 SourceTags: {
 	CustomName: 自定义
 	ModLocalization: 源模组
-	BTitles: BTitles
+	BTitles: Biome Titles
 	ExtraTitles: 补充翻译
 	Fallback: 默认
 }
@@ -101,8 +113,8 @@ Configs: {
 		}
 
 		OnlyFillMissingBiomes: {
-			Label: 仅补漏群系
-			Tooltip: 开启后，扫描不再触碰 BTitles 已注册的群系：不覆写标题、不配色、不做快照
+			Label: 仅“Biome Titles”未添加的群系
+			Tooltip: 开启后，扫描不再触碰“Biome Titles”已注册的群系：不覆写标题、不配色、不做快照
 		}
 
 		FilterMode: {
@@ -110,7 +122,7 @@ Configs: {
 			Tooltip:
 				'''
 				决定下方“名单”怎么用。
-				- 关闭：名单不生效（内容保留）
+				- 禁用：不启用名单
 				- 黑名单：名单里的群系不扫描
 				- 白名单：只扫描名单里的群系（名单为空时全部扫描）
 				'''
@@ -148,7 +160,7 @@ Configs: {
 			Tooltip: 该标题使用的颜色
 		}
 
-		// Tooltip: ""
+		Tooltip: ""
 	}
 
 	BiomeFilterEntry: {
@@ -157,26 +169,26 @@ Configs: {
 			Tooltip: 模组内部键（模组名.群系名）、群系短名，或屏幕上显示的标题名
 		}
 
-		// Tooltip: ""
+		Tooltip: ""
 	}
 
 	ScanFilterMode: {
 		Disabled: {
-			Label: 关闭
-			Tooltip: 不使用名单，所有群系照常扫描
+			Label: 禁用
+			Tooltip: 不使用名单，扫描所有群系
 		}
 
 		Blacklist: {
 			Label: 黑名单
-			Tooltip: 只跳过黑名单里的群系，其余照常扫描
+			Tooltip: 只跳过黑名单里的群系，不再显示；其余群系照常扫描
 		}
 
 		Whitelist: {
 			Label: 白名单
-			Tooltip: 只扫描白名单里的群系，其余跳过；白名单为空时全部扫描
+			Tooltip: 只扫描白名单里的群系，其余跳过；白名单为空时扫描全部群系
 		}
 
-		// Tooltip: ""
+		Tooltip: ""
 	}
 
 	TitleColorSource: {
@@ -200,6 +212,6 @@ Configs: {
 			Tooltip: 总是使用下方选定的固定颜色
 		}
 
-		// Tooltip: ""
+		Tooltip: ""
 	}
 }

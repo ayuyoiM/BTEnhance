@@ -75,8 +75,10 @@ namespace BTitlesLocalizationPatch
     /*
     扫描名单条目
     只填一个名字，折叠时直接显示它（同 BiomeColorMapping 的理由：不重写 ToString 就只剩「1: 」）
-    不挂 [Expand(false)]：单字段条目折叠起来等于每次编辑都得多点一下，反而更麻烦
+    [Expand(false)] 打在类上，列表项默认折叠：名单往往几十条，全展开会把整页撑长。
+    单字段条目折叠后要多点一下才能编辑，这个取舍与配色表保持一致
     */
+    [Expand(false)]
     public class BiomeFilterEntry
     {
         [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeFilterEntry.Name.Label")]

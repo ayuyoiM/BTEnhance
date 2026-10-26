@@ -278,7 +278,7 @@ BiomeRegistrar.Run(mod)     — 配色开关不传参，Run 自己从 BiomeNameH
   「仅补漏跳过」的条目也进检测列表——它们没写 `keyMapping`，lambda 回落返回短键 `biome.Name`，
   BTitles 字典只有命名空间键时 `TryGetValue` miss → `_currentBiomeEntry = null` →
   **BTitles 原本能显示的群系反而消失**
-- **仅补漏群系**（`OnlyFillMissingBiomes`）开启时：字典已有的键完全跳过——
+- **仅「Biome Titles」未添加的群系**（`OnlyFillMissingBiomes`）开启时：字典已有的键完全跳过——
   不覆写、不快照、不排队写入，仅计入 `ScanResult.Skipped`，并逐条记
   `SkippedExistingBiome`（走 `DebugLog.Info`，受「调试日志」开关控制：
   开这个开关时被跳过的条目可能有上百条，无脑写进 `tModLoader.log` 会把正常日志淹掉，
@@ -362,6 +362,9 @@ Run()
   `SkippedPlaceholder` / `SkippedExistingBiome` 同通道
 - 模式与表内容都是扫描期判定，改完走「先撤再扫」（见 §8 的 `ApplyConfigChangeRescan`）；
   模式为 `Disabled` 时只改表内容不触发重扫——那时候名单不参与判定，重扫纯属白干
+- **列表项默认折叠**：`[Expand(false)]` 打在 `BiomeFilterEntry` 类上，机制与逐群系配色表相同
+  （见 §7.3：`ObjectElement` 读的是元素类型上的特性）。单字段条目折叠后要多点一下才能编辑，
+  但名单往往几十条，全展开会把整页撑长，这个取舍与配色表保持一致
 
 ---
 
@@ -662,6 +665,12 @@ BTitlesLocalizationPatch
 日志消息通过 `Mods.BTitlesLocalizationPatch.Logs.{Key}` 本地化，支持中/英文
 （en-US `Logs:` 块共 43 键）。
 
+> **写 hjson 时注意引号**：值里若出现 `"`，整个值必须写成**完整闭合**的双引号字符串
+> （`Key: "say \"hi\""` 这种不行，hjson 只认无转义的成对引号）。像
+> `Key: "Only fill missing" changed` 这样引号包一半的写法会让整份文件解析失败，
+> 报错只有一行 `Error loading Mods.BTitlesLocalizationPatch.hjson`，不会指到具体键。
+> 想强调某个词，用中文引号或干脆不加引号。
+
 > **例外**：仅剩两处硬编码英文字符串未走本地化——`BTitlesLocalizationPatch.cs` 的
 > `Mod Load called again, skipped` 与 `GetActualTitleNameHookInstaller.cs` 的
 > `GetActualTitleName Detour patch applied successfully`。两者都在 Mod.Load 阶段触发，
@@ -673,8 +682,8 @@ BTitlesLocalizationPatch
 | `ScanningMod` | 开始处理某个模组的 ModBiome 列表（{0}=模组名，{1}=数量） |
 | `ScanSummary` | 扫描总结（新增/更新/跳过/字典数/检测数/未配色数） |
 | `ScanToggleOn` / `ScanToggleOff` | 扫描开关变更 |
-| `RescanOnOnlyFillMissing` | 「仅补漏群系」变更触发先撤再扫 |
 | `RescanOnFilterChanged` | 扫描黑/白名单变更触发先撤再扫 |
+| `RescanOnOnlyFillMissing` | 「仅“Biome Titles”未添加的群系」变更触发先撤再扫 |
 | `SkippedByBlacklist` / `SkippedByWhitelist` | 被扫描名单过滤的群系（走 `DebugLog.Info`，与 `SkippedExistingBiome` 同通道） |
 | `NewBiome` | 新增群系（带未配色标记） |
 | `SkippedExistingBiome` | 仅补漏模式下逐条记录被跳过的已有群系 |

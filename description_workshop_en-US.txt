@@ -29,7 +29,7 @@ The mod looks up biome names in the following priority order. Once a translation
 [h2]Configuration[/h2]
 [list]
 [*]Scan for new biomes — Auto-discover and register unregistered ModBiomes into the dictionary (takes effect immediately after saving)
-[*]Only fill missing biomes — Skip biomes Biome Titles already has; no overwrite, no recolor, and their display is left exactly as Biome Titles shows it; changing it triggers an immediate rescan
+[*]Only biomes not added by "Biome Titles" — Skip biomes Biome Titles already has; no overwrite, no recolor, and their display is left exactly as Biome Titles shows it; changing it triggers an immediate rescan
 [*]Biome blacklist/whitelist mode — Disabled / Blacklist / Whitelist, decides how the list is used
 [*]List — Read as a blacklist or whitelist depending on the mode; changes trigger an immediate rescan
 [*]Color Scheme — Assign title colors to the biomes the scan covers; also the master switch for per-biome title colors
