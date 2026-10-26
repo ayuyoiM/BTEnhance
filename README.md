@@ -106,6 +106,15 @@ Biome Titles 使用手动维护的方式收录群系名称。
 - 使用 `MonoMod.RuntimeDetour.Hook` 挂钩 `GetActualTitleName`，与原模组兼容良好
 - 自动扫描功能通过 tModLoader 原生反射和 `ModBiome.IsBiomeActive` 检测，不依赖特定模组
 
+## 开发文档
+
+想改这个模组，或者让 AI 接手，先读这两份：
+
+- [AGENTS.md](AGENTS.md) — AI 协作规则、当前状态快照、变更流水
+- [docs/PROJECT.md](docs/PROJECT.md) — 架构、生命周期、翻译回退链、配置系统、设计决策
+
+> 普通玩家看上面的功能说明和配置表就够了。
+
 ## 致谢
 
 - 感谢仍在使用 [Biome Titles](https://steamcommunity.com/sharedfiles/filedetails/?id=2992680615) 和使用本补丁的玩家

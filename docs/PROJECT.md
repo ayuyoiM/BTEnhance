@@ -43,7 +43,10 @@ BTitlesLocalizationPatch/                  # 文件夹名 = 内部名，不可�
 ├── .vscode/                              # 编辑器配置（launch.json、settings.json）
 ├── Properties/                           # launchSettings.json
 ├── README.md                             # 工坊介绍页
-├── PROJECT.md                            # 本文件
+├── AGENTS.md                             # AI 协作文档：规则 / 当前状态 / 变更流水
+├── docs/
+│   ├── PROJECT.md                        # 本文件：架构、生命周期、配置与决策记录
+│   └── ai-log-archive.md                 # AI 工作流水归档（AGENTS.md 流水溢出的旧条目）
 │
 ├── Scan/
 │   ├── BiomeRegistrar.cs                 # 自动扫描注册、检测函数构建、回滚/清理
