@@ -139,9 +139,7 @@ namespace BTitlesLocalizationPatch
 
             if (biomeEntry.Icon != null && !biomeEntry.Icon.IsDisposed)
             {
-                biomeEntry.TitleColor = BiomeStyleHelper.SampleRepresentativeColor(
-                    biomeEntry.Icon
-                );
+                biomeEntry.TitleColor = BiomeStyleHelper.SampleRepresentativeColor(biomeEntry.Icon);
                 BiomeRegistrar.PendingColorKeys.TryRemove(biomeEntry, out _);
             }
         }

@@ -354,11 +354,13 @@ namespace BTitlesLocalizationPatch
         }
 
         /*
-        OnlyFillMissingBiomes 改了要重扫：它是扫描期判定，不重扫就会把新旧口径混进同一份结果
+        扫描口径改了要重扫：仅补漏与黑/白名单都是「扫描期判定」，
+        不重扫就会把新旧口径混进同一份结果
         必须先撤再扫 —— BiomeRegistrar.Run 有「已有生效结果就不再扫」的早退，
         不清掉 ScannedBiomes 就永远扫不成第二次；撤净顺带把扫描令牌放回空闲态
+        logKey 决定日志措辞：改的是哪个开关就说哪个开关，别让玩家看「仅补漏已变更」却只动了名单
         */
-        internal static void ApplyConfigChangeOnlyFillMissing()
+        internal static void ApplyConfigChangeRescan(string logKey)
         {
             var mod = BeginScanConfigChange();
             if (mod == null)
@@ -372,9 +374,7 @@ namespace BTitlesLocalizationPatch
             UnregisterScannedBiomes(mod);
 
             mod.Logger.Info(
-                Language.GetTextValue(
-                    $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.RescanOnOnlyFillMissing"
-                )
+                Language.GetTextValue($"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.{logKey}")
             );
 
             Scan.BiomeRegistrar.Run(mod);

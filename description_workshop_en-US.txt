@@ -11,6 +11,7 @@ This mod hooks into the title resolution to automate that process — reading tr
 [*]Source Mod Priority — Prioritizes the biome's own mod localization (supports translation mods); values identical to the source mod's en-US original are treated as untranslated, so the search continues in BTitles or this patch's translations
 [*]Extra Translations — Provides missing Biome Titles translations (e.g. Aether)
 [*]Auto Scan — Automatically discovers unregistered ModBiomes and adds them to Biome Titles, skips placeholder biomes that don't override the detection method; scan summary shows pending-color count
+[*]Scan List — Control which biomes the scan covers with a single list: use it as a blacklist (listed biomes are skipped) or a whitelist (only listed biomes are scanned); accepts internal keys, short names, or the on-screen title
 [*]Auto Styling — Assigns title colors to the biomes the scan covers: by default uses only the mod-defined BackgroundColor (pure white when absent); also offers icon sampling, a fixed color, or "background first" (falls back to sampling a representative color — the average of valid pixels — from the icon when the background color is missing or white)
 [*]Per-Biome Colors — Assign a color to a specific biome by the title name shown on screen; takes priority over the automatic color source
 [/list]
@@ -29,6 +30,8 @@ The mod looks up biome names in the following priority order. Once a translation
 [list]
 [*]Scan for new biomes — Auto-discover and register unregistered ModBiomes into the dictionary (takes effect immediately after saving)
 [*]Only fill missing biomes — Skip biomes Biome Titles already has; no overwrite, no recolor, and their display is left exactly as Biome Titles shows it; changing it triggers an immediate rescan
+[*]Biome blacklist/whitelist mode — Disabled / Blacklist / Whitelist, decides how the list is used
+[*]List — Read as a blacklist or whitelist depending on the mode; changes trigger an immediate rescan
 [*]Color Scheme — Assign title colors to the biomes the scan covers; also the master switch for per-biome title colors
 [*]Color Source / Fixed Title Color — Pick the coloring strategy, or set the color used by the "Fixed" strategy
 [*]Per-biome title colors — Assign a color to a specific biome by the title name shown on screen; takes priority over Color Source

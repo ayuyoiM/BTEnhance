@@ -34,7 +34,10 @@ Logs: {
 	UnloadHopFailed: Main-thread hop failed during unload ({0}); biomes left in BTitles dictionary
 	EnUsMapFailed: Failed to build en-US source map for mod [{0}]: {1}
 	SkippedExistingBiome: Skipped existing biome: [{0}] → {1} (already registered by BTitles)
+	SkippedByBlacklist: Skipped blacklisted biome: [{0}] → {1}
+	SkippedByWhitelist: Skipped biome not in whitelist: [{0}] → {1}
 	RescanOnOnlyFillMissing: Only-fill-missing changed, rescanning (unregister then scan)...
+	RescanOnFilterChanged: List settings changed, rescanning (unregister then scan)...
 	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
 	RefreshFailed: Failed to refresh the current title: {0}
 	HookDisposeFailed: Hook Dispose failed: {0}
@@ -101,6 +104,27 @@ Configs: {
 			Tooltip: When enabled, scanning never touches biomes already registered by BTitles: no title overwrite, no styling, no snapshot
 		}
 
+		FilterMode: {
+			Label: Biome blacklist/whitelist mode
+			Tooltip:
+				'''
+				How the "List" below is used.
+				- Disabled: the list has no effect (its contents are kept)
+				- Blacklist: biomes in the list are not scanned
+				- Whitelist: only biomes in the list are scanned (an empty list scans everything)
+				'''
+		}
+
+		ScanFilterList: {
+			Label: List
+			Tooltip:
+				'''
+				Read as a blacklist or a whitelist depending on "Biome blacklist/whitelist mode" above.
+				Accepted forms: internal key (Mod.Biome), short biome name, or the title shown on screen;
+				case and surrounding whitespace are ignored.
+				'''
+		}
+
 		TitleColorMappings: {
 			Label: Per-biome title colors
 			Tooltip:
@@ -121,6 +145,34 @@ Configs: {
 		Color: {
 			Label: Title color
 			Tooltip: Color used for this title
+		}
+
+		Tooltip: ""
+	}
+
+	BiomeFilterEntry: {
+		Name: {
+			Label: Biome
+			Tooltip: Internal key (Mod.Biome), short biome name, or the title shown on screen
+		}
+
+		Tooltip: ""
+	}
+
+	ScanFilterMode: {
+		Disabled: {
+			Label: Disabled
+			Tooltip: No list is used; every biome is scanned as usual
+		}
+
+		Blacklist: {
+			Label: Blacklist
+			Tooltip: Skip only the biomes in the blacklist; everything else is scanned
+		}
+
+		Whitelist: {
+			Label: Whitelist
+			Tooltip: Scan only the biomes in the whitelist; an empty whitelist scans everything
 		}
 
 		Tooltip: ""

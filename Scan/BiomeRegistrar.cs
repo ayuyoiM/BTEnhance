@@ -54,6 +54,8 @@ namespace BTitlesLocalizationPatch.Scan
             bool enableStyling = BiomeNameHook.IsStylingEnabled();
             bool onlyFillMissing = IsOnlyFillMissing();
             (var colorSource, var fixedColor) = BiomeStyleHelper.GetStylingSettings();
+            // 名单是扫描期判定：这里读一次，整轮共用（改名单由 OnChanged 走「先撤再扫」）
+            var filter = BiomeFilter.Read();
 
             // 抢占令牌再判状态：这一步是原子的，同一时刻只有一个调用能进来
             if (Interlocked.CompareExchange(ref _scanState, 2, 0) != 0)
@@ -88,6 +90,7 @@ namespace BTitlesLocalizationPatch.Scan
                     onlyFillMissing,
                     colorSource,
                     fixedColor,
+                    filter,
                     biomes
                 );
 
@@ -197,6 +200,7 @@ namespace BTitlesLocalizationPatch.Scan
             bool onlyFillMissing,
             TitleColorSource colorSource,
             Color fixedColor,
+            BiomeFilter.FilterSnapshot filter,
             List<(string DictKey, ModBiome Biome, bool IsNew)> scannedBiomes
         )
         {
@@ -236,9 +240,33 @@ namespace BTitlesLocalizationPatch.Scan
                                 SafeFormat(
                                     Localize("SkippedPlaceholder"),
                                     biome.Name,
-                                    biome.DisplayName.Value
+                                    biome.DisplayName?.Value ?? biome.Name
                                 )
                             );
+                            skipped++;
+                            continue;
+                        }
+
+                        /*
+                        扫描名单过滤放在占位检测之后：占位群系本来就不会注册，
+                        先过名单只会让日志里的跳过原因变模糊
+                        按 FilterMode 解释成黑名单或白名单，命中即算「跳过」，逐条明细走 DebugLog，
+                        总数并进 ScanSummary 的 skipped，不额外加参数
+                        */
+                        string displayName = biome.DisplayName?.Value ?? biome.Name;
+                        var verdict = BiomeFilter.Evaluate(
+                            filter,
+                            $"{targetMod.Name}.{biome.Name}",
+                            biome.Name,
+                            displayName
+                        );
+                        if (verdict != BiomeFilterVerdict.Pass)
+                        {
+                            string reasonKey =
+                                verdict == BiomeFilterVerdict.Blacklisted
+                                    ? "SkippedByBlacklist"
+                                    : "SkippedByWhitelist";
+                            DebugLog.Info(SafeFormat(Localize(reasonKey), biome.Name, displayName));
                             skipped++;
                             continue;
                         }

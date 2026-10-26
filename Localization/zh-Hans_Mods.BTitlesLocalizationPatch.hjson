@@ -34,7 +34,10 @@ Logs: {
 	UnloadHopFailed: 卸载期间主线程跳转失败（{0}），BTitles 字典中的群系条目未能移除
 	EnUsMapFailed: 构建模组 [{0}] 的 en-US 源文案表失败：{1}
 	SkippedExistingBiome: 已跳过已有群系: [{0}] → {1}（BTitles 已收录）
-	RescanOnOnlyFillMissing: 「仅补漏群系」已变更，正在先撤再扫……
+	SkippedByBlacklist: 已跳过黑名单群系: [{0}] → {1}
+	SkippedByWhitelist: 已跳过白名单外群系: [{0}] → {1}
+	RescanOnOnlyFillMissing: “仅补漏群系”已变更，正在先撤再扫……
+	RescanOnFilterChanged: 名单设置已变更，正在先撤再扫……
 	RefreshUnavailable: 无法即时刷新当前标题（未取到 BTitles 的界面字段），新配色将在下次切换群系时生效
 	RefreshFailed: 刷新当前标题失败：{0}
 	HookDisposeFailed: 卸载 Hook 失败：{0}
@@ -94,12 +97,33 @@ Configs: {
 
 		FixedTitleColor: {
 			Label: 固定标题颜色
-			Tooltip: 仅在颜色来源为「固定颜色」时生效
+			Tooltip: 仅在颜色来源为“固定颜色”时生效
 		}
 
 		OnlyFillMissingBiomes: {
 			Label: 仅补漏群系
 			Tooltip: 开启后，扫描不再触碰 BTitles 已注册的群系：不覆写标题、不配色、不做快照
+		}
+
+		FilterMode: {
+			Label: 群系黑白名单模式
+			Tooltip:
+				'''
+				决定下方“名单”怎么用。
+				- 关闭：名单不生效（内容保留）
+				- 黑名单：名单里的群系不扫描
+				- 白名单：只扫描名单里的群系（名单为空时全部扫描）
+				'''
+		}
+
+		ScanFilterList: {
+			Label: 名单
+			Tooltip:
+				'''
+				按上方“群系黑白名单模式”解释为黑名单或白名单。
+				三种写法都认：模组内部键（模组名.群系名）、群系短名、屏幕上显示的标题名；
+				忽略大小写与首尾空白。
+				'''
 		}
 
 		TitleColorMappings: {
@@ -108,7 +132,7 @@ Configs: {
 				'''
 				为指定群系覆盖颜色来源，
 				按屏幕上实际显示的标题名匹配，
-				命中优先于上方「颜色来源」
+				命中优先于上方“颜色来源”
 				'''
 		}
 	}
@@ -122,6 +146,34 @@ Configs: {
 		Color: {
 			Label: 群系标题颜色
 			Tooltip: 该标题使用的颜色
+		}
+
+		// Tooltip: ""
+	}
+
+	BiomeFilterEntry: {
+		Name: {
+			Label: 群系
+			Tooltip: 模组内部键（模组名.群系名）、群系短名，或屏幕上显示的标题名
+		}
+
+		// Tooltip: ""
+	}
+
+	ScanFilterMode: {
+		Disabled: {
+			Label: 关闭
+			Tooltip: 不使用名单，所有群系照常扫描
+		}
+
+		Blacklist: {
+			Label: 黑名单
+			Tooltip: 只跳过黑名单里的群系，其余照常扫描
+		}
+
+		Whitelist: {
+			Label: 白名单
+			Tooltip: 只扫描白名单里的群系，其余跳过；白名单为空时全部扫描
 		}
 
 		// Tooltip: ""

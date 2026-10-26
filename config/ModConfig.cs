@@ -57,6 +57,35 @@ namespace BTitlesLocalizationPatch
         public override string ToString() => Title ?? "";
     }
 
+    /*
+    扫描名单模式
+    - Disabled：名单不生效（表里的内容原样留着，不影响扫描）
+    - Blacklist：表按黑名单解释，命中即跳过
+    - Whitelist：表按白名单解释，未命中即跳过；表为空时全放行
+    只有一张表，模式决定它怎么被读——「既在黑名单又在白名单」这种自相矛盾的配置不存在
+    枚举成员的中文标签走 tML 自动注册键：Mods.BTitlesLocalizationPatch.Configs.ScanFilterMode.{成员}.Label
+    */
+    public enum ScanFilterMode
+    {
+        Disabled,
+        Blacklist,
+        Whitelist,
+    }
+
+    /*
+    扫描名单条目
+    只填一个名字，折叠时直接显示它（同 BiomeColorMapping 的理由：不重写 ToString 就只剩「1: 」）
+    不挂 [Expand(false)]：单字段条目折叠起来等于每次编辑都得多点一下，反而更麻烦
+    */
+    public class BiomeFilterEntry
+    {
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeFilterEntry.Name.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BiomeFilterEntry.Name.Tooltip")]
+        public string Name { get; set; } = "";
+
+        public override string ToString() => Name ?? "";
+    }
+
     public class BTitlesConfig : ModConfig
     {
         public override ConfigScope Mode => ConfigScope.ClientSide;
@@ -79,13 +108,33 @@ namespace BTitlesLocalizationPatch
         )]
         public bool OnlyFillMissingBiomes { get; set; }
 
+        /*
+        名单模式：决定下面这张表按什么方式用
+        - Disabled：表不生效（留着内容也不影响扫描）
+        - Blacklist：表里是黑名单，命中即跳过
+        - Whitelist：表里是白名单，未命中即跳过；表为空时全放行
+        一张表 + 一个模式，切换模式不需要搬数据；两张表同时生效的「冲突时听谁的」问题也就不存在
+        属于扫描期判定，改完必须重扫，见 OnChanged
+        */
+        [DefaultValue(ScanFilterMode.Disabled)]
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FilterMode.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.FilterMode.Tooltip")]
+        public ScanFilterMode FilterMode { get; set; }
+
+        // 扫描名单：按 FilterMode 解释成黑名单或白名单
+        [LabelKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.ScanFilterList.Label")]
+        [TooltipKey("$Mods.BTitlesLocalizationPatch.Configs.BTitlesConfig.ScanFilterList.Tooltip")]
+        public List<BiomeFilterEntry> ScanFilterList { get; set; } = new List<BiomeFilterEntry>();
+
         private bool _lastAutoStyling;
         private bool _lastScan;
         private TitleColorSource _lastColorSource;
         private Color _lastFixedColor;
         private bool _lastOnlyFillMissing;
+        private ScanFilterMode _lastFilterMode;
 
-        // 空表的签名是 0，初值也用 0：没动过表时不该平白触发一次全量重配色
+        // 两张表的签名初值都用 0：空表签名也是 0，没动过表时不该平白触发一次重扫 / 全量重配色
+        private int _lastFilterSignature;
         private int _lastMappingsSignature;
 
         /*
@@ -103,6 +152,8 @@ namespace BTitlesLocalizationPatch
             _lastFixedColor = FixedTitleColor;
             _lastOnlyFillMissing = OnlyFillMissingBiomes;
             _lastMappingsSignature = ComputeMappingsSignature(TitleColorMappings);
+            _lastFilterMode = FilterMode;
+            _lastFilterSignature = ComputeFilterSignature(ScanFilterList);
         }
 
         // 自动配色总开关：控制策略色的批量上色与图标采样；
@@ -171,6 +222,27 @@ namespace BTitlesLocalizationPatch
             return hash.ToHashCode();
         }
 
+        /*
+        扫描名单的签名，口径同 ComputeMappingsSignature：
+        Save 一定触发 OnChanged，但拿不到「哪一项变了」，用「条数 + 每项名字」的哈希判断
+        只用于决定「要不要重扫」，不需要密码学强度
+        */
+        private static int ComputeFilterSignature(List<BiomeFilterEntry>? entries)
+        {
+            if (entries == null || entries.Count == 0)
+                return 0;
+
+            var hash = new HashCode();
+            hash.Add(entries.Count);
+            foreach (var entry in entries)
+            {
+                if (entry == null)
+                    continue;
+                hash.Add(entry.Name);
+            }
+            return hash.ToHashCode();
+        }
+
         // tModLoader 确认保存后通知，直接执行配置变更
         // 主菜单时 BTitles 未加载，操作会静默跳过；进世界后 PostSetupContent 处理初始状态
         public override void OnChanged()
@@ -185,7 +257,9 @@ namespace BTitlesLocalizationPatch
             TitleColorSource colorSourceCurrent = PreferredColorSource;
             Color fixedColorCurrent = FixedTitleColor;
             bool onlyFillCurrent = OnlyFillMissingBiomes;
+            ScanFilterMode filterModeCurrent = FilterMode;
             int mappingsSignature = ComputeMappingsSignature(TitleColorMappings);
+            int filterSignature = ComputeFilterSignature(ScanFilterList);
 
             bool styleToggleChanged = styleCurrent != _lastAutoStyling;
             bool styleChanged =
@@ -203,24 +277,38 @@ namespace BTitlesLocalizationPatch
 
             bool scanChanged = scanCurrent != _lastScan;
             bool onlyFillChanged = onlyFillCurrent != _lastOnlyFillMissing;
+            /*
+            模式变了必然要重扫；只改表内容时，模式关着就没必要白扫一遍——
+            名单在 Disabled 下压根不参与判定
+            */
+            bool filterChanged =
+                filterModeCurrent != _lastFilterMode
+                || (
+                    filterModeCurrent != ScanFilterMode.Disabled
+                    && filterSignature != _lastFilterSignature
+                );
 
             /*
             同一轮 Save 只能扫一次
-            两个开关最终都落到「扫描要不要重来」上，逐项 if 会连扫两遍：
-            先 ApplyConfigChangeScan 扫一遍，再 ApplyConfigChangeOnlyFillMissing 撤掉重扫一遍
+            扫描开关、仅补漏、扫描名单最终都落到「扫描要不要重来」上，逐项 if 会连扫多遍：
+            先 ApplyConfigChangeScan 扫一遍，再撤掉重扫一遍
             - 扫描开关本身变了：交给 ApplyConfigChangeScan。它会重新扫，而
-              BiomeRegistrar.Run 里的 IsOnlyFillMissing() 是扫描开始时现读配置，
-              所以同一轮里改的「仅补漏」新值天然被这次扫描带上，不需要再扫一遍
-            - 扫描开关没变、只改了「仅补漏」：它是扫描期判定，必须「先撤再扫」，
+              BiomeRegistrar.Run 里的 IsOnlyFillMissing() / BiomeFilter.Read() 都是扫描开始时现读配置，
+              所以同一轮里改的「仅补漏」和名单天然被这次扫描带上，不需要再扫一遍
+            - 扫描开关没变、只改了「仅补漏」或名单：它们是扫描期判定，必须「先撤再扫」，
               不清掉 ScannedBiomes 就永远扫不成第二次
             */
             if (scanChanged)
                 BTitlesLocalizationPatch.ApplyConfigChangeScan(scanCurrent);
-            else if (onlyFillChanged && scanCurrent)
-                BTitlesLocalizationPatch.ApplyConfigChangeOnlyFillMissing();
+            else if ((onlyFillChanged || filterChanged) && scanCurrent)
+                BTitlesLocalizationPatch.ApplyConfigChangeRescan(
+                    onlyFillChanged ? "RescanOnOnlyFillMissing" : "RescanOnFilterChanged"
+                );
 
             _lastScan = scanCurrent;
             _lastOnlyFillMissing = onlyFillCurrent;
+            _lastFilterMode = filterModeCurrent;
+            _lastFilterSignature = filterSignature;
         }
     }
 }
