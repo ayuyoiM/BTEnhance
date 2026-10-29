@@ -87,6 +87,14 @@ jobs:
               exit 1
             fi
           done
+
+          # native 库的文件名带 .so.0 后缀，而加载器按 libX.so 找。
+          # 官方 LaunchUtils/EnvironmentFix.sh 只给 SDL2 建了软链，这里把 FNA3D / FAudio 补齐。
+          # 不补的话 -build 会报 "Unable to load shared library 'FNA3D'"。
+          libdir="$tml/Libraries/Native/Linux"
+          ln -sf "$libdir/libSDL2-2.0.so.0" "$libdir/libSDL2.so"
+          ln -sf "$libdir/libFNA3D.so.0" "$libdir/libFNA3D.so"
+          ln -sf "$libdir/libFAudio.so.0" "$libdir/libFAudio.so"
           echo "layout ok"
 
       - name: Assemble ModSources layout
@@ -135,14 +143,17 @@ jobs:
         shell: bash
         # BuildMod 目标会在 Build 之后调用 `dotnet tModLoader.dll -server -build ...` 真正打包 .tmod，
         # 顺带跑 hjson 的运行时校验 —— 这正是本地 `dotnet build` 覆盖到的那一层。
-        # 该调用发生在图形初始化之前（Main.dedServ 置位后立即 BuildModCommandLine → Environment.Exit），
-        # 所以无显示器的 runner 能跑，也不需要 LD_LIBRARY_PATH。
+        #
+        # 注意：-server 并没有让 tML 跳过全部 native 加载，FNA3D 仍然会被加载
+        # （2026-10-29 首次 Linux 运行就是死在 "Unable to load shared library 'FNA3D'"）。
+        # 所以必须给 LD_LIBRARY_PATH，跟官方 LaunchUtils/EnvironmentFix.sh 一个路子。
         #
         # -tmlsavedirectory 把存档根钉到 $RUNNER_TEMP/tmlsave，产物固定在 <root>/Mods/，
         # 不依赖 $HOME 的 XDG 路径。ExtraBuildModFlags 在 tMLMod.targets 里没有默认值，
         # MSBuild 会自动读同名环境变量。
         env:
           ExtraBuildModFlags: -tmlsavedirectory ${{ runner.temp }}/tmlsave
+          LD_LIBRARY_PATH: ${{ runner.temp }}/tModLoader/Libraries/Native/Linux
         run: |
           set -euo pipefail
           # 日志写在项目目录之外：tML 打包时会遍历项目目录，日志落在里面会被一起扫到。
