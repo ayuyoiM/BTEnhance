@@ -1,0 +1,221 @@
+name: Build
+
+# 只在可能影响产物的改动上触发。纯文档改动不占用 runner。
+# 注意：tag push 不受 paths-ignore 影响，打 v* 标签一定会跑。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: 8.0.x
+  # tModLoader 的 GitHub Release 包是全平台合并包：根目录同时有 tModLoader.dll、tMLMod.targets、
+  # Libraries/（Windows / Linux / Linux-arm64 / OSX 四套 native）以及 start-tModLoader.sh。
+  # 解压即是一份完整的 tMLSteamPath，Linux runner 直接可用，不需要 SteamCMD。
+  # 升级 tML 时只改这一行，下面的 cache key 会自动失效。
+  TML_VERSION: v2026.08.3.0
+  # BTitles 是 ProjectReference 而非 DLL 引用，CI 上必须拉源码。
+  BTITLES_REPO: n-Name336/BTitles-1.4.3
+  BTITLES_REF: 1.4.4
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build:
+    name: Build & package (.tmod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout mod source
+        uses: actions/checkout@v4
+        with:
+          # 直接落到 ModSources 结构里，省得后面搬来搬去。
+          path: ModSources/BTitlesLocalizationPatch
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache tModLoader
+        id: cache-tml
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/tModLoader
+          key: tml-${{ runner.os }}-${{ env.TML_VERSION }}
+
+      - name: Download tModLoader
+        if: steps.cache-tml.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/tModLoader/tModLoader/releases/download/${TML_VERSION}/tModLoader.zip"
+          curl -L --fail --retry 3 --retry-delay 5 --silent --show-error -o "$RUNNER_TEMP/tModLoader.zip" "$url"
+          mkdir -p "$RUNNER_TEMP/tModLoader"
+          unzip -q "$RUNNER_TEMP/tModLoader.zip" -d "$RUNNER_TEMP/tModLoader"
+          rm -f "$RUNNER_TEMP/tModLoader.zip"
+
+      # 断言包结构，cache 命中时也跑：残缺的缓存目录不该拖到 dotnet build 才暴露。
+      # 上游换打包方式时这里会先炸，报错也比 MSB3245 好读。
+      - name: Verify tModLoader layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          tml="$RUNNER_TEMP/tModLoader"
+          for rel in tModLoader.dll tMLMod.targets \
+                     Libraries/TerrariaHooks/0.0.0.0/TerrariaHooks.dll \
+                     Libraries/tModCodeAssist/1.0.0/tModCodeAssist.dll; do
+            if [ ! -f "$tml/$rel" ]; then
+              echo "::error::$rel missing under $tml (drop the tml-Linux cache entry and re-run)"
+              exit 1
+            fi
+          done
+          echo "layout ok"
+
+      - name: Assemble ModSources layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          ws="$GITHUB_WORKSPACE/ModSources"
+          tml="$RUNNER_TEMP/tModLoader"
+
+          # 1) BTitles 源码，必须和 BTitlesLocalizationPatch 同级
+          git clone --depth 1 --branch "$BTITLES_REF" "https://github.com/$BTITLES_REPO.git" "$ws/BTitles"
+
+          # 2) ModSources/tModLoader.targets —— 本地这份是手写的硬编码路径，CI 上按解压位置生成
+          cat > "$ws/tModLoader.targets" <<EOF
+          <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+            <Import Project="$tml/tMLMod.targets" />
+          </Project>
+          EOF
+
+          # 3) 上游 BTitles.csproj 里有两个硬编码到 C:\Program Files (x86)\Steam 的 <Reference>。
+          #    tMLMod.targets 已经通过 $(tMLSteamPath) / $(tMLLibraryPath) 提供了同名程序集，
+          #    这两条只会产生 MSB3245 + MSB3243 噪音（本地 4 个 warning 的来源）。
+          #    只改 runner 上的副本，不动上游仓库。
+          python3 - "$ws/BTitles/BTitles.csproj" <<'PY'
+          import re
+          import sys
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8", newline="") as handle:
+              text = handle.read()
+
+          text = re.sub(r'\s*<Reference Include="(?:tModLoader|TerrariaHooks)">.*?</Reference>', "", text, flags=re.S)
+          text = re.sub(r"\s*<ItemGroup>\s*</ItemGroup>", "", text)
+
+          with open(path, "w", encoding="utf-8", newline="") as handle:
+              handle.write(text)
+          PY
+          if grep -q '<Reference' "$ws/BTitles/BTitles.csproj"; then
+            echo "::error::failed to strip hardcoded <Reference> from BTitles.csproj"
+            exit 1
+          fi
+          echo "BTitles.csproj: hardcoded references removed"
+
+      - name: Build
+        working-directory: ModSources/BTitlesLocalizationPatch
+        shell: bash
+        # BuildMod 目标会在 Build 之后调用 `dotnet tModLoader.dll -server -build ...` 真正打包 .tmod，
+        # 顺带跑 hjson 的运行时校验 —— 这正是本地 `dotnet build` 覆盖到的那一层。
+        # 该调用发生在图形初始化之前（Main.dedServ 置位后立即 BuildModCommandLine → Environment.Exit），
+        # 所以无显示器的 runner 能跑，也不需要 LD_LIBRARY_PATH。
+        #
+        # -tmlsavedirectory 把存档根钉到 $RUNNER_TEMP/tmlsave，产物固定在 <root>/Mods/，
+        # 不依赖 $HOME 的 XDG 路径。ExtraBuildModFlags 在 tMLMod.targets 里没有默认值，
+        # MSBuild 会自动读同名环境变量。
+        env:
+          ExtraBuildModFlags: -tmlsavedirectory ${{ runner.temp }}/tmlsave
+        run: |
+          set -euo pipefail
+          # 日志写在项目目录之外：tML 打包时会遍历项目目录，日志落在里面会被一起扫到。
+          dotnet build -c "$BUILD_CONFIGURATION" 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      # 上游 BTitles 自己有一批 CS0618 / CS0162 / ChangeMagicNumberToID 警告，压不住也不该压。
+      # 这里只对本模组自己的警告零容忍。
+      #
+      # 正则里必须是 [^(:]* 而不是 [^/]+：本项目源码分布在根目录、Scan/、config/ 三层，
+      # 用「不允许分隔符」的写法会把子目录里的 warning 全部漏掉。
+      - name: Fail on warnings from this mod
+        shell: bash
+        run: |
+          set -euo pipefail
+          hits=$(grep -E '(^|[\\/])BTitlesLocalizationPatch[\\/][^(:]*\.cs\([0-9]+,[0-9]+\): warning' "$RUNNER_TEMP/build.log" || true)
+          if [ -n "$hits" ]; then
+            printf '%s\n' "$hits"
+            echo "::error::$(printf '%s\n' "$hits" | wc -l) warning(s) produced by BTitlesLocalizationPatch"
+            exit 1
+          fi
+          echo "no warnings from BTitlesLocalizationPatch"
+
+      - name: Collect .tmod
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$GITHUB_WORKSPACE/artifacts"
+          mkdir -p "$out"
+          tmod=""
+          # -tmlsavedirectory 生效时产物在第一个路径；没生效则兜底找默认存档目录。
+          for d in "$RUNNER_TEMP/tmlsave/Mods" "$HOME/.local/share/Terraria/tModLoader/Mods"; do
+            if [ ! -d "$d" ]; then continue; fi
+            tmod=$(find "$d" -maxdepth 1 -name 'BTitlesLocalizationPatch.tmod' | head -n1)
+            if [ -n "$tmod" ]; then break; fi
+          done
+          if [ -z "$tmod" ]; then
+            echo "::error::no .tmod produced, check the tml-logs artifact"
+            exit 1
+          fi
+          cp "$tmod" "$out/"
+          ls -l "$out"
+
+      - name: Upload .tmod
+        uses: actions/upload-artifact@v4
+        with:
+          name: BTitlesLocalizationPatch-${{ env.BUILD_CONFIGURATION }}
+          path: artifacts/*.tmod
+          if-no-files-found: error
+
+      # 打包失败时最需要看的是 tML 自己的日志，它比 dotnet 的报错具体得多。
+      - name: Upload tML logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tml-logs
+          path: ${{ runner.temp }}/tModLoader/tModLoader-Logs
+          if-no-files-found: ignore
+
+  localization:
+    name: Localization keys
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # 键集合必须两边一致：少一个键，对应语言在游戏里就会退回英文（或显示原始键）。
+      # 用 uv 的临时环境装 hjson，不引入 requirements.txt / pyproject.toml。
+      - name: Check key parity
+        run: uv run --no-project --with hjson python .github/scripts/check_localization.py Localization
