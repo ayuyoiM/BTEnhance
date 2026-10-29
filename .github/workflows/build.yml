@@ -44,19 +44,19 @@ jobs:
 
     steps:
       - name: Checkout mod source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # 直接落到 ModSources 结构里，省得后面搬来搬去。
           path: ModSources/BTitlesLocalizationPatch
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache tModLoader
         id: cache-tml
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/tModLoader
           key: tml-${{ runner.os }}-${{ env.TML_VERSION }}
@@ -129,6 +129,19 @@ jobs:
           text = re.sub(r'\s*<Reference Include="(?:tModLoader|TerrariaHooks)">.*?</Reference>', "", text, flags=re.S)
           text = re.sub(r"\s*<ItemGroup>\s*</ItemGroup>", "", text)
 
+          # 上游 BTitles 自己有一批 CS0618 / CS0162 / CS0414 与 ChangeMagicNumberToID 警告。
+          # 它们不影响产物，但会被 GitHub 提取成 annotation 把面板刷满。
+          # 只在上游副本上抑制；本项目仍由后面的 warning 门禁零容忍。
+          # 换行符跟随原文件（runner 上是 LF，本地 clone 可能是 CRLF），别混着写。
+          nl = "\r\n" if "\r\n" in text else "\n"
+          text = text.replace(
+              "  </PropertyGroup>",
+              "    <NoWarn>$(NoWarn);CS0618;CS0162;CS0414;ChangeMagicNumberToID</NoWarn>" + nl + "  </PropertyGroup>",
+              1,
+          )
+          if "<NoWarn>" not in text:
+              raise SystemExit("failed to inject <NoWarn> into BTitles.csproj")
+
           with open(path, "w", encoding="utf-8", newline="") as handle:
               handle.write(text)
           PY
@@ -197,7 +210,7 @@ jobs:
           ls -l "$out"
 
       - name: Upload .tmod
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BTitlesLocalizationPatch-${{ env.BUILD_CONFIGURATION }}
           path: artifacts/*.tmod
@@ -206,7 +219,7 @@ jobs:
       # 打包失败时最需要看的是 tML 自己的日志，它比 dotnet 的报错具体得多。
       - name: Upload tML logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tml-logs
           path: ${{ runner.temp }}/tModLoader/tModLoader-Logs
@@ -219,12 +232,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
+          # 本仓库没有 requirements.txt / pyproject.toml / uv.lock，默认的
+          # cache-dependency-glob 一个都匹配不到，会刷 "cache will never get invalidated" 警告。
+          # 真正决定缓存的只有这个校验脚本。
+          cache-dependency-glob: .github/scripts/check_localization.py
 
       # 键集合必须两边一致：少一个键，对应语言在游戏里就会退回英文（或显示原始键）。
       # 用 uv 的临时环境装 hjson，不引入 requirements.txt / pyproject.toml。
