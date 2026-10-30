@@ -198,6 +198,40 @@ dotnet build
 
 > 最新在上。格式见「怎么写」，四段：标题 / 改动 / 为什么 / 验证。
 
+### 2026-10-30 · en-US 布局识别、建表过滤与扫描取消
+
+改动
+
+- `BiomeNameHook.BuildEnUsMap` —— 新增 `TryResolveEnUsPrefix`：先判目录名再交给 tML 的解析函数，
+  同时支持 `en-US_Mods.X.hjson`、`en-US.hjson`、`en-US/Mods.X.hjson` 三种布局；
+  `FlattenHjson` 只收 `.Biomes.*.DisplayName`，新增 `CombineKey` 处理 prefix 为空的情形
+- `BiomeRegistrar` —— 令牌由布尔 `_scanState` 换成代次 `_scanOwner` / `_scanGeneration`，
+  新增 `BeginScan` / `ReleaseScan` / `IsCancelled`；提交段加 `_commitLock`；
+  `Rollback` 改带 `generation` 并先判取消，另拆出 `RollbackCommitted` 供主线程提交失败用
+- `docs/PROJECT.md` —— 「翻译回退链」补三种布局与建表范围，「回滚」改签名说明，
+  「线程模型」补令牌机制，「设计决策记录」新增三行
+
+为什么
+
+上一轮把 `Run` 改成 `Task.Run` 之后，扫描变得可以「跑到一半」：配置变更时 `ClearScannedBiomes`
+会把令牌置 0，但后台扫描仍会完成并提交结果——关扫描后条目照旧注册；改名单还会让两次扫描并发，
+孤儿检测函数留在 BTitles 的列表里。布尔令牌说不出「跑的是不是已被取消的那一次」，换成代次就能在提交前判定。
+
+布局与过滤是在 `ModReader` 里实测出来的：CalamityMod 只有 dll（本地化由代码注册），
+StarsAbove 用 `en-US.hjson`（prefix 为空），NoxusBoss 用 `en-US/Mods.X.hjson`（culture 在目录）。
+原实现只把 `Path.GetFileName` 交给解析函数，后两种布局整份被跳过——大模组的 en-US 对照从未生效过。
+过滤范围也据实收窄：StarsAbove 的 en-US 有 6552 个叶子，`Biomes.DisplayName` 只有 12 个。
+
+否决「只判 `.DisplayName` 结尾」：那样 6552 个叶子一个都砍不掉，等于没过滤。
+否决「只修布局不做过滤」：大模组进表会先吃一遍全表内存，顺序反了。
+
+验证
+
+- `dotnet build` → 0 个错误
+- Python 模拟平铺 StarsAbove：6552 个叶子 → 12 个 `Biomes.DisplayName`，键形如
+  `Mods.StarsAbove.Biomes.BleachedWorldBiome.DisplayName`
+- 未进游戏验证：三种布局的实际命中、扫描取消的表现、提交段加锁后的时序，均未实测
+
 ### 2026-10-30 · 修复跨线程与时钟类缺陷，注释迁入 PROJECT.md
 
 改动
@@ -280,43 +314,3 @@ dotnet build
 - 更正 2026-10-28 条目的「warning 过滤正则实测」：当时的 `[^\\/]+` 不允许路径含分隔符，
   子目录（`Scan/`、`config/`）里的 warning 会被漏判。本次改 `[^(:]*` 修掉
 - 未在 runner 上实跑：Linux 上 `dotnet tModLoader.dll -server -build` 是否真跑通，只能等首次 push
-
-### 2026-10-28 · 新增 GitHub Actions 构建工作流
-
-改动
-
-- `.github/workflows/build.yml` 新增 —— `build` job（windows-latest：拉 tML Release 包、拼 `ModSources/` 布局、
-  `dotnet build -c Release` 含 tML 打包、上传 `.tmod`）与 `localization` job（ubuntu-latest：hjson 键对齐）
-- `.github/scripts/check_localization.py` 新增 —— 解析 `Localization/*.hjson`，展开嵌套键比对集合，
-  不一致时按 `::error file=...::missing key` 注解输出
-
-为什么
-
-本机 `dotnet build` 依赖三样 CI 上不存在的东西：`../BTitles` 源码、`../tModLoader.targets`、
-Steam 装的 tModLoader。做法是拉 tML 的 GitHub Release 包（`tModLoader.zip`，根目录自带
-`tModLoader.dll` / `tMLMod.targets` / `Libraries/`，等于一份现成 `tMLSteamPath`），按 `ModSources/`
-结构拼装，仓库内 `csproj` 一行不改。
-
-否决 SteamCMD（要 Steam 账号 + Terraria 授权，凭据进 Actions 不可接受）；否决把 tML 塞进
-`C:\Program Files (x86)\Steam\...` 去迎合上游 `BTitles.csproj` 的硬编码 HintPath（依赖 runner 是 admin，
-脏）。改为在 runner 上删掉那两条 `<Reference>`：`tMLMod.targets` 已用 `$(tMLSteamPath)` /
-`$(tMLLibraryPath)` 提供同名程序集，它们只会产生 MSB3245 + MSB3243（本地 4 个 warning 就是它们）。
-
-保留完整 `dotnet build` 而非 `-p:BuildMod=false`：`BuildMod` 目标会真跑 `dotnet tModLoader.dll -build`，
-顺带完成 hjson 运行时校验，补上「本地只验证到编译」的缺口。
-
-验证
-
-- 本地模拟 runner 布局（clone 上游 `BTitles` 1.4.4 + 生成 targets + patch csproj）后
-  `dotnet build -c Release` → `0 个警告 0 个错误`，产出 `.tmod` 226 KB
-- 整条链路在 `pwsh 7.6.9`（runner 的 `shell: pwsh`，与本机 `powershell.exe` 5.1 不是一回事）
-  下重跑一遍：targets 生成、csproj patch、`dotnet build`、warning 过滤、`.tmod` 收集全通过
-- `check_localization.py` 三态实测：正常 `95 键对齐` exit 0；删一键 → `missing key 'Logs.BiomeColor'` exit 1；
-  注入未闭合引号 → 解析失败 exit 1
-- warning 过滤正则实测：命中本项目 `.cs` warning，不误伤上游 `BTitles\*.cs`、`.csproj` 级与 tML 的 `WARN:` 行
-- 踩到并已修：`build.log` 写在项目目录里时 tML 打包会去读它，撞上 tee 占用直接
-  `TML001: The process cannot access the file`；日志改到 `$RUNNER_TEMP`
-- 踩到并已修：`pwsh` 的 `[Console]::OutputEncoding` 默认是 `gb2312`，dotnet 按 UTF-8 吐的中文警告
-  会被按 GBK 解码，日志和 artifact 全是乱码；`Build` 与 `Fail on warnings` 两步都显式钉成 UTF-8
-- 未在 runner 上实跑：无 Steam 环境下 `dotnet tModLoader.dll -build` 能否启动、首次运行是否自动建
-  `Mods/` 目录，均未验证。失败时 `tml-logs` artifact 会带上 tML 日志

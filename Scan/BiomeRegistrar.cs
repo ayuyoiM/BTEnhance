@@ -42,16 +42,42 @@ namespace BTitlesLocalizationPatch.Scan
         > LastDetectionWarnMs = new();
         private const long DetectionWarnCooldownMs = 5000;
 
-        // 扫描入场令牌：0=空闲（可扫描） 2=扫描进行中
-        // Run 的调用方既有 PostSetupContent（后台线程）也有配置回调（主线程），
-        // 单靠 ScannedBiomes != null 是读-判-写，两个线程可能同时通过
-        private static int _scanState;
+        /*
+        扫描令牌：0 = 空闲，非 0 = 当前持有者的代次
+        用代次而不是布尔，是为了让 ClearScannedBiomes 能作废「正在跑」的那一次：
+        清空时把令牌置 0，在跑的扫描提交前发现自己的代次不再匹配，就丢弃结果。
+        布尔令牌说不清「跑的是不是已经被取消的那一次」，只能表示「有人在跑」
+        Run 的调用方既有 PostSetupContent（后台线程）也有配置回调（主线程），
+        单靠 ScannedBiomes != null 是读-判-写，两个线程可能同时通过
+        */
+        private static int _scanOwner;
+        private static int _scanGeneration;
+
+        // 提交段的互斥：取消检查与三个字段赋值必须原子，否则两个扫描仍可能交错写入
+        private static readonly object _commitLock = new();
 
         /*
         配色开关不从这里传参：Hook 层判定用的是 BiomeNameHook.IsStylingEnabled()，
         若扫描侧另收一份，两者就有两个真相，配置回调里的 UpdateStylingCache 一慢半拍就会各说各话
         统一从缓存读，调用方不必也不该再带一份
         */
+        // 抢令牌并领一个代次；返回 0 表示已有扫描在跑
+        private static int BeginScan()
+        {
+            int generation = Interlocked.Increment(ref _scanGeneration);
+            return Interlocked.CompareExchange(ref _scanOwner, generation, 0) == 0
+                ? generation
+                : 0;
+        }
+
+        // 只有仍持有令牌时才释放，避免误清后来者的
+        private static void ReleaseScan(int generation) =>
+            Interlocked.CompareExchange(ref _scanOwner, 0, generation);
+
+        // 令牌已不是自己的：期间被 ClearScannedBiomes 取消，或被后一次扫描接管
+        private static bool IsCancelled(int generation) =>
+            Volatile.Read(ref _scanOwner) != generation;
+
         /*
         扫描入口。主线程来的调用（配置回调）甩到线程池，避免卡住 UI；
         PostSetupContent 那条照旧在本线程执行。异常为何分层处理见 docs/PROJECT.md「线程模型」
@@ -85,15 +111,16 @@ namespace BTitlesLocalizationPatch.Scan
             // 名单是扫描期判定：这里读一次，整轮共用（改名单由 OnChanged 走「先撤再扫」）
             var filter = BiomeFilter.Read();
 
-            // 抢占令牌再判状态：这一步是原子的，同一时刻只有一个调用能进来
-            if (Interlocked.CompareExchange(ref _scanState, 2, 0) != 0)
+            // 抢令牌并领一个代次：这一步是原子的，同一时刻只有一个调用能进来
+            int generation = BeginScan();
+            if (generation == 0)
                 return;
 
             // 已有生效结果就不再扫：重复扫描会把上次自己新增的条目当成「已有条目」快照，
             // 之后关闭扫描只能还原成扫描后的样子，条目和原值都回不来
             if (ScannedBiomes != null)
             {
-                Interlocked.Exchange(ref _scanState, 1);
+                ReleaseScan(generation);
                 return;
             }
 
@@ -122,20 +149,31 @@ namespace BTitlesLocalizationPatch.Scan
                     biomes
                 );
 
-                RegisteredCheckFunc = BuildDetectionFunction(
+                // 期间可能被 ClearScannedBiomes 取消（关扫描 / 改名单）：结果作废，令牌也已不是自己的
+                if (IsCancelled(generation))
+                    return;
+
+                var checkFunc = BuildDetectionFunction(
                     scanResult.AllBiomes,
                     scanResult.KeyMapping
                 );
-                PreScanValues = scanResult.ExistingSnapshots;
-                ScannedBiomes = biomes;
 
-                // 状态归到「已有生效结果」，此后重复开关扫描走上面那条早退
-                Interlocked.Exchange(ref _scanState, 1);
+                // 取消检查与三个字段赋值必须原子，否则后一次扫描可能正好插在中间，
+                // 让前一次的结果覆盖掉后一次的
+                lock (_commitLock)
+                {
+                    if (IsCancelled(generation))
+                        return;
+
+                    RegisteredCheckFunc = checkFunc;
+                    PreScanValues = scanResult.ExistingSnapshots;
+                    ScannedBiomes = biomes;
+                }
 
                 // BTitles 在主线程每帧遍历这两个集合，写入必须合并成一次主线程操作
                 // 捕获已解析的引用而不重新反射：Unload 会清空反射字段
                 var writes = scanResult.PendingWrites;
-                var funcToInsert = RegisteredCheckFunc;
+                var funcToInsert = checkFunc;
                 Main.QueueMainThreadAction(() =>
                 {
                     // 排队期间可能已被取消（Cleanup 清空了引用），提交会插回一个「无主」的函数
@@ -174,7 +212,7 @@ namespace BTitlesLocalizationPatch.Scan
                         // 就地撤销本次全部写入：此刻还握着 writes 与 PreScanValues，
                         // 而且正好在主线程，是唯一能干净回退的时机
                         UndoWrites(biomeDict, writes, checkFuncs, funcToInsert);
-                        Rollback();
+                        RollbackCommitted();
                     }
                 });
             }
@@ -182,8 +220,13 @@ namespace BTitlesLocalizationPatch.Scan
             {
                 // 解析或遍历阶段抛出时令牌还握在手里，不放回去就是永久锁死：
                 // 用户之后怎么开关扫描都会被上面那次抢占挡掉，再也不会重试
-                Rollback();
+                Rollback(generation);
                 throw;
+            }
+            finally
+            {
+                // 成功路径也要放令牌：能不能重扫由 ScannedBiomes 判断，令牌只表示「有人在跑」
+                ReleaseScan(generation);
             }
         }
 
@@ -589,12 +632,28 @@ namespace BTitlesLocalizationPatch.Scan
 
         // 扫描中途失败：字典写入尚未提交，丢弃本次的临时登记
         // 令牌也要放开，否则下次开关扫描会被 Run 的抢占直接挡掉
-        private static void Rollback()
+        private static void Rollback(int generation)
+        {
+            // 已被取消（令牌不再属于自己）：这些数据可能已经是后一次扫描的，不能清
+            if (IsCancelled(generation))
+                return;
+
+            PendingColorKeys.Clear();
+            ScannedBiomes = null;
+            PreScanValues = null;
+            ReleaseScan(generation);
+        }
+
+        /*
+        提交失败的回退，只在主线程回调里调用
+        与上面那个的区别：此时扫描已经成功提交过、令牌也已在 finally 里释放，
+        所以不能走「已取消就跳过」的判断，必须无条件清掉这份跟踪状态
+        */
+        private static void RollbackCommitted()
         {
             PendingColorKeys.Clear();
             ScannedBiomes = null;
             PreScanValues = null;
-            Interlocked.Exchange(ref _scanState, 0);
         }
 
         /*
@@ -770,7 +829,8 @@ namespace BTitlesLocalizationPatch.Scan
             ScannedBiomes = null;
             PreScanValues = null;
             PendingColorKeys.Clear();
-            Interlocked.Exchange(ref _scanState, 0);
+            // 作废正在跑的那一次：它的代次不再匹配，提交前会自行放弃
+            Interlocked.Exchange(ref _scanOwner, 0);
         }
 
         private sealed record ScanResult(

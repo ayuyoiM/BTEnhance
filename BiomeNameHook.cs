@@ -449,13 +449,17 @@ namespace BTitlesLocalizationPatch
 
         /*
         构建单个模组的 en-US 键值表
-        路径依据（已核对 tML 源码）：
-        - LocalizationLoader.TryGetCultureAndPrefixFromPath(path, out culture, out prefix)：public 静态，
-          文件名形如 en-US_Mods.XYZ.hjson → culture=en-US、prefix=Mods.XYZ
-        - Mod.RootContentSource.EnumerateAssets()：RootContentSource 对发行模组是 TModContentSource，
-          枚举出「含模组名前缀的完整资产路径」；OpenStream(assetName) 直接给流
-        建表键 = prefix + "." + 叶节点的点路径（即 tML 注册后的完整键），
-        值 = 叶节点字符串。只保留 Mods.* 前缀（步骤 1 只查这类键）
+
+        只收 DisplayName 叶子：IsEnglishFallbackValue 只查
+        Mods.{mod}.Biomes.{key}.DisplayName 这一类键，物品名 / NPC 名 / buff 描述存进来纯属浪费。
+        实测 StarsAbove 的 en-US 里 2330 个 DisplayName 只有 24 个属于群系
+
+        三种布局都要认（实测都存在于真实模组中）：
+        - Localization/en-US_Mods.X.hjson    → culture 与 prefix 都在文件名
+        - Localization/en-US.hjson           → 只有 culture，内容自带 Mods:{X:{...}} 外层
+        - Localization/en-US/Mods.X.hjson    → culture 在目录名，文件名即 prefix
+        早先只把 Path.GetFileName 交给 tML 的解析函数，后两种布局因此全部被跳过，
+        大模组的 en-US 对照从未生效过
         */
         private static IReadOnlyDictionary<string, string> BuildEnUsMap(Mod mod)
         {
@@ -470,20 +474,8 @@ namespace BTitlesLocalizationPatch
                 {
                     if (!assetPath.EndsWith(".hjson", StringComparison.OrdinalIgnoreCase))
                         continue;
-                    // 文件名（不含目录）做语言判定，与 tML 加载逻辑一致
-                    string fileName = Path.GetFileName(assetPath);
-                    if (
-                        !LocalizationLoader.TryGetCultureAndPrefixFromPath(
-                            fileName,
-                            out GameCulture? culture,
-                            out string? prefix
-                        )
-                        || culture?.Name != "en-US"
-                        || string.IsNullOrEmpty(prefix)
-                    )
-                    {
+                    if (!TryResolveEnUsPrefix(assetPath, out string prefix))
                         continue;
-                    }
 
                     using var stream = source.OpenStream(assetPath);
                     using var reader = new StreamReader(stream);
@@ -509,6 +501,45 @@ namespace BTitlesLocalizationPatch
             return result;
         }
 
+        /*
+        判定一条资产路径是不是 en-US 本地化，并给出建表用的前缀
+        返回 true 时 prefix 可能为空串：那是「内容自带完整路径」的布局，平铺时直接以叶节点路径为键
+        先看目录再看文件名：布局三里文件名（Mods.X.Biomes.hjson）有可能被 tML 的解析函数误当成
+        culture，先判目录就不会被这种误判挡住
+        */
+        private static bool TryResolveEnUsPrefix(string assetPath, out string prefix)
+        {
+            prefix = "";
+            string fileName = Path.GetFileName(assetPath);
+
+            // 布局三：culture 是最后一层目录名，文件名即 prefix
+            string directory = (Path.GetDirectoryName(assetPath) ?? "").Replace('\\', '/');
+            int slash = directory.LastIndexOf('/');
+            string lastDir = slash >= 0 ? directory[(slash + 1)..] : directory;
+            if (string.Equals(lastDir, "en-US", StringComparison.OrdinalIgnoreCase))
+            {
+                prefix = Path.GetFileNameWithoutExtension(fileName);
+                return !string.IsNullOrEmpty(prefix);
+            }
+
+            // 布局一 / 二：culture 写在文件名里，交给 tML 的解析函数
+            if (
+                LocalizationLoader.TryGetCultureAndPrefixFromPath(
+                    fileName,
+                    out GameCulture? culture,
+                    out string? filePrefix
+                )
+                && culture != null
+                && culture.Name == "en-US"
+            )
+            {
+                prefix = filePrefix ?? "";
+                return true;
+            }
+
+            return false;
+        }
+
         // 展开解析后的 Hjson：叶子（字符串等标量）记为 key=value；对象递归；数组一律跳过（本地化键不会是数组）
         private static void FlattenHjson(
             JsonValue value,
@@ -519,17 +550,31 @@ namespace BTitlesLocalizationPatch
             if (value is JsonObject obj)
             {
                 foreach (string key in obj.Keys)
-                    FlattenHjson(obj[key], $"{prefix}.{key}", into);
+                    FlattenHjson(obj[key], CombineKey(prefix, key), into);
                 return;
             }
             // 数组显式跳过：掉进下面的叶子分支会被 ToString() 成 "[...]" 整段文本记进对照表
             if (value is JsonArray)
                 return;
-            // 叶子：只有字符串才算本地化值（数字/布尔不是 DisplayName 场景，但也照记，代价可忽略）
+
+            // 只收群系显示名：IsEnglishFallbackValue 只查 Mods.{mod}.Biomes.{key}.DisplayName 这一类键。
+            // 只判 .DisplayName 结尾是不够的 —— StarsAbove 的 en-US 里有 2330 个 DisplayName，
+            // 属于群系的只有 24 个，不限定 .Biomes. 等于没过滤。
+            // 这段与 TryStep1 里拼键的格式强耦合：那边改了键结构，这里必须同步，否则会静默退化成 ASCII 判断
+            if (
+                !prefix.EndsWith(".DisplayName", StringComparison.Ordinal)
+                || !prefix.Contains(".Biomes.", StringComparison.Ordinal)
+            )
+                return;
+
             string? text = HjsonValueCheck(value);
             if (text != null && !into.ContainsKey(prefix))
                 into[prefix] = text;
         }
+
+        // 布局二的 prefix 为空：内容自带 Mods:{X:{...}} 外层，叶节点路径本身就是完整键
+        private static string CombineKey(string prefix, string key) =>
+            prefix.Length == 0 ? key : $"{prefix}.{key}";
 
         private static string? HjsonValueCheck(JsonValue value)
         {

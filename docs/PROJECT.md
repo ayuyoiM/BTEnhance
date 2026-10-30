@@ -207,9 +207,17 @@ Unload()
 
 - 步骤 1 拿到的本地化值会与同键 en-US 原值直接比较（序数区分大小写）
 - en-US 对照表按需构建并缓存：遍历 `mod.RootContentSource` 的 `.hjson` 资产，
-  用 `LocalizationLoader.TryGetCultureAndPrefixFromPath` 识别 en-US 文件，
-  `HjsonValue.Parse` 平铺成 `键 → 值` 字典（含负缓存）
-- 平铺时数组节点显式跳过（`FlattenHjson`，`BiomeNameHook.cs:516-517`）：本地化键不会是数组，
+  识别出 en-US 文件后用 `HjsonValue.Parse` 平铺成 `键 → 值` 字典（含负缓存）
+- **三种布局都要认**（实测都存在于真实模组；早先只认第一种，后两种从未生效过）：
+  - `Localization/en-US_Mods.X.hjson` —— culture 与 prefix 都在文件名
+  - `Localization/en-US.hjson` —— 只有 culture，内容自带 `Mods:{X:{...}}` 外层，prefix 为空
+  - `Localization/en-US/Mods.X.hjson` —— culture 在目录名，文件名即 prefix
+  判定顺序是「先目录后文件名」：布局三的文件名 `Mods.X.Biomes.hjson` 可能被
+  `TryGetCultureAndPrefixFromPath` 误当成 culture，先判目录就不会被挡住
+- **只收 `Mods.{mod}.Biomes.{key}.DisplayName`**：`IsEnglishFallbackValue` 只查这一类键。
+  实测 StarsAbove 的 en-US 有 6552 个叶子，属于群系的只有 12 个——不限定 `.Biomes.` 等于没过滤。
+  这段与 `TryStep1` 拼键的格式强耦合，那边改结构时这里必须同步，否则静默退化成 ASCII 判断
+- 平铺时数组节点显式跳过（`FlattenHjson`）：本地化键不会是数组，
   掉进叶子分支只会被 `ToString()` 成 `"[...]"` 整段文本记进对照表
 - 模组无 en-US 资产、或键不在 en-US 表里（BTitles 运行时注册的键）→
   保守回退旧的 `IsPureAscii()`（纯 ASCII 判定）
@@ -313,12 +321,17 @@ player => {
 
 ### 6.5 回滚
 
-`ScanAllModBiomes` 抛异常时调用 `Rollback()`，它**只重置扫描状态、不碰字典**：
+`ScanAllModBiomes` 抛异常时调用 `Rollback(generation)`，它**只重置扫描状态、不碰字典**：
 
+- 先判 `IsCancelled(generation)`：令牌已不属于自己就整个跳过——此时这些数据可能已经是
+  后一次扫描的，清掉就是误伤
 - `PendingColorKeys.Clear()`
 - `ScannedBiomes = null`、`PreScanValues = null`
-- `Interlocked.Exchange(ref _scanState, 0)`（释放入场令牌）
+- `ReleaseScan(generation)`（只有仍持有时才释放）
 - **不动** `RegisteredCheckFunc`，**不**从字典移除任何键
+
+另有一个 `RollbackCommitted()`，只在主线程提交失败的 catch 里调用：那时扫描已成功提交、
+令牌也已在 `finally` 里释放，所以不能走「已取消就跳过」的判断，必须无条件清
 
 真正做「移除条目 + 按快照还原 + 摘检测函数」的是另一个方法 `UndoWrites`
 （`BiomeRegistrar.cs:545-573`），只在主线程提交失败（`ApplyWrites` 抛异常）的 catch 里调用
@@ -637,6 +650,7 @@ GetActualTitleNameHook
 - `_cachedValue`（TimedValueCache 实例字段）— 多线程读（UI 渲染）/ 主线程写（冷却刷新）
 - `RegisteredCheckFunc` / `ScannedBiomes` — 后台线程写，主线程读
 - `_snapshotEntries` / `_snapshotMode`（`BiomeFilter`）— 主线程写，后台扫描读
+- `_scanOwner` / `_scanGeneration`（`BiomeRegistrar`）— 扫描令牌，主线程（配置变更）与后台线程（扫描）同时读写
 
 **配色表相关状态的线程归属**：`MappedOriginalColors` 与 `PendingColorKeys` 都只在主线程的
 Hook / 配置回调路径上读写，用 `ConcurrentDictionary` 是为了与既有结构保持一致并留出余量，
@@ -652,6 +666,15 @@ Hook / 配置回调路径上读写，用 `ConcurrentDictionary` 是为了与既�
 这是「拒绝加载」该有的样子。主线程转出去的那条早已脱离 `ModLoader.Load` 的 try，
 抛出去只会变成主循环里的裸异常（没人认领、也不会禁用模组），所以在 `Task.Run` 里
 catch 后记一条 `DebugLog.Error(ScanFailed)`。
+
+**扫描令牌用代次而不是布尔**：`_scanOwner` 存的是当前持有者的代次，0 表示空闲。
+`ClearScannedBiomes` 把令牌置 0 就等于「作废正在跑的那一次」——在跑的扫描提交前用
+`IsCancelled(generation)` 一比就知道自己已被取消，直接丢弃结果。
+
+这条是异步化之后必须补的：`Run` 转 `Task.Run` 后，配置变更可能发生在扫描进行中。
+原来的布尔令牌说不清「跑的是不是已经被取消的那一次」，只能表示「有人在跑」，
+于是关扫描后那次扫描仍会把条目注册进去、改名单还会让两个扫描并发。
+提交段另有 `_commitLock` 兜底：取消检查与三个字段赋值必须原子，否则后一次扫描可能插在中间。
 
 ---
 
@@ -733,6 +756,9 @@ BTitlesLocalizationPatch
 | 「白色背景」判定 | 只比 RGB，容差 245（`IsNearWhite`） | `!= Color.White` | `Color` 的 `==` 是全分量比较，alpha 不同就不相等；近白也漏判。两者都会被当成有背景色，标题刷成近白色后看不见 |
 | 图标加载方式 | `ImmediateLoad`（主线程同步） | `AsyncLoad` | 异步返回时拿不到纹理，条目只能留在待补色队列反复重试，而重试时机挂在「标题被刷新」上——玩家不切群系就一直白着，比卡一下更难排查。要消顿挫应做分帧加载，不是换异步 |
 | 扫描检测告警限频 | `TickCount64` + `const 5000ms` | `DateTime.UtcNow` + `TimeSpan` | 与冷却缓存同一套时间基准；时钟回拨在这里的后果是反方向——异常告警再也不出现 |
+| 扫描令牌 | 代次整数（`_scanOwner` / `_scanGeneration`） | 布尔标志 | 异步化之后需要区分「跑的是不是已被取消的那一次」；布尔只能表示「有人在跑」，关扫描后旧扫描仍会提交结果，改名单还会让两次扫描并发 |
+| en-US 布局识别 | 先目录后文件名，三种布局都认 | 只把文件名交给 tML 的解析函数 | 实测 `en-US.hjson`（prefix 为空）与 `en-US/Mods.X.hjson`（culture 在目录）两种布局都会被原实现跳过，大模组的对照从未生效 |
+| en-US 建表范围 | 只收 `.Biomes.*.DisplayName` | 所有 `Mods.*` 叶子 | 实测 StarsAbove 6552 个叶子里只有 12 个属于群系；不限定等于没过滤 |
 
 ---
 
