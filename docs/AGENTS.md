@@ -4,7 +4,7 @@
 >
 > 本文件只回答「最近发生了什么、为什么」，架构真相看 `docs/PROJECT.md`。
 >
-> 最后更新：2026-10-30 | 当前版本：v1.4.2.1
+> 最后更新：2026-10-31 | 当前版本：v1.4.2.2
 
 ---
 
@@ -148,7 +148,7 @@ dotnet build
 
 ### 1.1 项目坐标
 
-- 版本：v1.4.2.1（`build.txt`）
+- 版本：v1.4.2.2（`build.txt`）
 - 显示名：Biome Titles Enhance / 生物群系标题增强
 - 内部名：`BTitlesLocalizationPatch`（文件夹 / 程序集 / 本地化键前缀，不可改，见「活跃的坑」）
 - 分支：`main`，与 `origin/main` 同步；工作区有未提交改动（本轮跨线程与时钟修复 + 文档，见「流水」）
@@ -197,6 +197,25 @@ dotnet build
 ## 2. 流水
 
 > 最新在上。格式见「怎么写」，四段：标题 / 改动 / 为什么 / 验证。
+
+### 2026-10-31 · 发布 1.4.2.2
+
+改动
+
+- `changelog.txt` 新增 v1.4.2.2 段：扫描取消的两条修复，布局识别与建表过滤两条改进
+- `build.txt` version 1.4.2.1 → 1.4.2.2
+- `docs/PROJECT.md` 与 `docs/AGENTS.md` 版本号同步；10-29 流水移入归档
+
+为什么
+
+上一轮的代次令牌修的是「关扫描后仍注册群系」与「两次扫描并发」，属于玩家可见的行为变化，
+值得单独发一版；布局识别与建表过滤对现有模组没有可见收益（实测 StarsAbove 的 12 个群系全不受影响，
+中文能显示靠的是 `IsPureAscii` 回退），但随同一版带走，避免再开一次发布。
+
+验证
+
+- `dotnet build` → 0 个错误
+- 未进游戏验证：扫描取消的实际表现仍未实测
 
 ### 2026-10-30 · en-US 布局识别、建表过滤与扫描取消
 
@@ -281,36 +300,3 @@ StarsAbove 用 `en-US.hjson`（prefix 为空），NoxusBoss 用 `en-US/Mods.X.hj
   动过配置路径，需进游戏改一次名单与配色表确认
 - 已提交 `c16ddba`（13 文件，+1327/−121）；版本号 1.4.2 → 1.4.2.1，附注 tag `1.4.2.1`
   打在发布提交上（本地，未 push）
-
-### 2026-10-29 · 构建 job 从 Windows 迁到 Linux
-
-改动
-
-- `.github/workflows/build.yml` —— `build` job 改 `ubuntu-latest` + `shell: bash`，全部步骤用 bash 重写；
-  产物路径用 `-tmlsavedirectory $RUNNER_TEMP/tmlsave` 钉死；warning 过滤正则改 `[^(:]*` 以覆盖子目录
-- `AGENTS.md` —— 新增本条流水，「补充构建方式」移入 `docs/ai-log-archive.md`
-
-为什么
-
-`tModLoader.zip` 是全平台合并包：本机 `Libraries/Native/` 下同时有 `Windows/`、`Linux/`、
-`Linux-arm64/`、`OSX/` 四套原生库，根目录还有 `start-tModLoader.sh`。所以 Linux runner 解压即用，
-不需要 SteamCMD。之前误判成 Windows 专用包，是漏看了那些 `.sh`。
-
-`-build` 在图形初始化之前就退出：`Program.cs.patch` 里 `Main.dedServ = isServer` 后立即
-`ModCompile.BuildModCommandLine(build)` → `Environment.Exit(0)`，SDL / FAudio / HighDPI 全在其后
-且被 `isServer` 挡掉。所以无显示器的 runner 能跑，也不需要 `LD_LIBRARY_PATH`。
-
-否决 SteamCMD（`+login anonymous +app_update 1281930` 可行但多下 400MB，没必要）；
-否决 `-p:AllowUnsafeBlocks=false`（`Utils.ParseArguements` 遇 `-` 开头即切换 key，
-`-unsafe -tmlsavedirectory /path` 解析正确，官方 CI 同样写法且跑得通）；
-否决双 job 并存（回滚靠 git 就够）。
-
-验证
-
-- `pyyaml` 解析通过；6 个 bash step 全部 `bash -n` 通过
-- python 替换在真实上游 `BTitles.csproj` 上实测：`<Reference>` 2 → 0，空 `<ItemGroup>` 一并清掉
-- warning 正则三组实测：命中 `BTitlesLocalizationPatch/Scan/BiomeFilter.cs` 与 analyzer 警告；
-  不误伤 `BTitles/GeneralConfig.cs` 与 `.csproj` 级；真实构建日志 0 命中
-- 更正 2026-10-28 条目的「warning 过滤正则实测」：当时的 `[^\\/]+` 不允许路径含分隔符，
-  子目录（`Scan/`、`config/`）里的 warning 会被漏判。本次改 `[^(:]*` 修掉
-- 未在 runner 上实跑：Linux 上 `dotnet tModLoader.dll -server -build` 是否真跑通，只能等首次 push
