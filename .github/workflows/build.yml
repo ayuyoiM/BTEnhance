@@ -16,6 +16,11 @@ on:
       - 'docs/**'
       - 'LICENSE'
   workflow_dispatch:
+    inputs:
+      tml_version:
+        description: 'tModLoader version tag. Leave empty to use the latest stable Release.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -26,11 +31,10 @@ concurrency:
 
 env:
   DOTNET_VERSION: 8.0.x
-  # tModLoader 的 GitHub Release 包是全平台合并包：根目录同时有 tModLoader.dll、tMLMod.targets、
-  # Libraries/（Windows / Linux / Linux-arm64 / OSX 四套 native）以及 start-tModLoader.sh。
+  # tModLoader 版本不写死：默认由 Resolve 步骤从 GitHub 取最新的 stable Release。
+  # tML 的 GitHub Release 包是全平台合并包（根目录同时有 tModLoader.dll、tMLMod.targets、
+  # Libraries/ 下 Windows / Linux / Linux-arm64 / OSX 四套 native，以及 start-tModLoader.sh），
   # 解压即是一份完整的 tMLSteamPath，Linux runner 直接可用，不需要 SteamCMD。
-  # 升级 tML 时只改这一行，下面的 cache key 会自动失效。
-  TML_VERSION: v2026.08.3.0
   # BTitles 是 ProjectReference 而非 DLL 引用，CI 上必须拉源码。
   BTITLES_REPO: n-Name336/BTitles-1.4.3
   BTITLES_REF: 1.4.4
@@ -54,19 +58,45 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      # releases/latest 天然排除 prerelease，所以拿到的是 stable 分支的产物，
+      # 不会误用 preview 包。手动触发时可以用 tml_version 输入钉住某个版本。
+      # 加 Authorization 是因为匿名 API 每小时只有 60 次。
+      - name: Resolve tModLoader version
+        id: tml
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ver="${{ inputs.tml_version }}"
+          if [ -z "$ver" ]; then
+            ver=$(curl -sL --fail -H "Authorization: Bearer $GH_TOKEN" \
+              https://api.github.com/repos/tModLoader/tModLoader/releases/latest \
+              | python3 -c "import sys,json;print(json.load(sys.stdin)['tag_name'])")
+          fi
+          if [ -z "$ver" ]; then
+            echo "::error::failed to resolve tModLoader version from the GitHub API"
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "tModLoader: $ver"
+
       - name: Cache tModLoader
         id: cache-tml
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/tModLoader
-          key: tml-${{ runner.os }}-${{ env.TML_VERSION }}
+          key: tml-${{ runner.os }}-${{ steps.tml.outputs.version }}
 
       - name: Download tModLoader
         if: steps.cache-tml.outputs.cache-hit != 'true'
         shell: bash
+        env:
+          TML_VERSION: ${{ steps.tml.outputs.version }}
         run: |
           set -euo pipefail
           url="https://github.com/tModLoader/tModLoader/releases/download/${TML_VERSION}/tModLoader.zip"
+          echo "downloading $url"
           curl -L --fail --retry 3 --retry-delay 5 --silent --show-error -o "$RUNNER_TEMP/tModLoader.zip" "$url"
           mkdir -p "$RUNNER_TEMP/tModLoader"
           unzip -q "$RUNNER_TEMP/tModLoader.zip" -d "$RUNNER_TEMP/tModLoader"
@@ -150,6 +180,7 @@ jobs:
             exit 1
           fi
           echo "BTitles.csproj: hardcoded references removed"
+
 
       - name: Build
         working-directory: ModSources/BTitlesLocalizationPatch
