@@ -5,7 +5,7 @@ includeSource = false
 modReferences = BTitles
 side = Client
 translationMod = false
-version = 1.4.2
+version = 1.4.2.1
 homepage = https://github.com/ayuyoiM/BTEnhance.git
 # 这些是仓库与文档文件，不属于 mod 资源，不该被打进 .tmod
 # 规则见 BuildProperties.FitsMask：逗号分隔、* 与 ? 通配、匹配相对路径整串

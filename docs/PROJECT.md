@@ -1,7 +1,7 @@
 # Biome Titles Enhance 项目文档
 
 > 显示名：Biome Titles Enhance / 生物群系标题增强；内部名（文件夹、程序集、本地化键前缀）仍为 `BTitlesLocalizationPatch`
-> 版本：v1.4.2 | 作者：Mio | 工坊 ID：3758079429 | 仓库：https://github.com/ayuyoiM/BTEnhance
+> 版本：v1.4.2.1 | 作者：Mio | 工坊 ID：3758079429 | 仓库：https://github.com/ayuyoiM/BTEnhance
 
 ---
 
@@ -30,7 +30,7 @@ BTitlesLocalizationPatch/                  # 文件夹名 = 内部名，不可�
 ├── BTitlesIncompatibleException.cs       # BTitles 版本不兼容异常
 ├── BiomeEntryReferenceComparer.cs        # BiomeEntry 的引用相等比较器（扫描侧与 Hook 侧共用）
 ├── BTitlesLocalizationPatch.csproj       # 项目引用（BTitles）
-├── build.txt                             # 模组元数据（v1.4.2、modReferences=BTitles）
+├── build.txt                             # 模组元数据（v1.4.2.1、modReferences=BTitles）
 ├── changelog.txt                         # 更新日志
 ├── description.txt                       # 工坊简介（中/英）
 ├── description_workshop.txt
