@@ -12,7 +12,7 @@ This mod hooks into the title resolution to automate that process — reading tr
 [*]Extra Translations — Provides missing Biome Titles translations (e.g. Aether)
 [*]Auto Scan — Automatically discovers unregistered ModBiomes and adds them to Biome Titles, skips placeholder biomes that don't override the detection method; scan summary shows pending-color count
 [*]Scan List — Control which biomes the scan covers with a single list: use it as a blacklist (listed biomes are skipped) or a whitelist (only listed biomes are scanned); accepts internal keys, short names, or the on-screen title
-[*]Auto Styling — Assigns title colors to the biomes the scan covers: by default uses only the mod-defined BackgroundColor (pure white when absent); also offers icon sampling, a fixed color, or "background first" (falls back to sampling a representative color — the average of valid pixels — from the icon when the background color is missing or white)
+[*]Auto Styling — Assigns title colors to the biomes the scan covers: defaults to "background first" (uses the mod-defined BackgroundColor; falls back to sampling a representative color — the average of valid pixels — from the icon when the background color is missing or near-white); also offers background color only, icon sampling, or a fixed color
 [*]Per-Biome Colors — Assign a color to a specific biome by the title name shown on screen; takes priority over the automatic color source
 [/list]
 

@@ -16,9 +16,11 @@ namespace BTitlesLocalizationPatch.Diagnostics
         // volatile: 允许不同线程（UI 渲染 / PostSetupContent）读取同一个缓存值
         private volatile bool _cachedValue;
 
+        // 时间基准用 TickCount64（单调递增），不用 UtcNow：系统时钟回拨会让差值变负、缓存永不刷新。
+        // 详见 docs/PROJECT.md「冷却缓存」
         // long 不能 volatile（CS0677），用 Volatile.Read/Write 保证原子可见性
-        private long _lastCheckTicks;
-        private readonly long _cooldownTicks;
+        private long _lastCheckMs;
+        private readonly long _cooldownMs;
 
         // 日志里用它指出是哪个配置项读不到，多个缓存实例共用同一条 Warn
         private readonly string _name;
@@ -31,19 +33,19 @@ namespace BTitlesLocalizationPatch.Diagnostics
         {
             _name = name;
             Read = read;
-            _cooldownTicks = cooldown.Ticks;
+            _cooldownMs = (long)cooldown.TotalMilliseconds;
         }
 
         private Func<bool> Read { get; }
 
         public bool Get()
         {
-            long now = DateTime.UtcNow.Ticks;
-            long lastTicks = Volatile.Read(ref _lastCheckTicks);
-            if (now - lastTicks < _cooldownTicks)
+            long now = Environment.TickCount64;
+            long lastMs = Volatile.Read(ref _lastCheckMs);
+            if (now - lastMs < _cooldownMs)
                 return _cachedValue;
 
-            Volatile.Write(ref _lastCheckTicks, now);
+            Volatile.Write(ref _lastCheckMs, now);
             try
             {
                 _cachedValue = Read();
@@ -68,14 +70,16 @@ namespace BTitlesLocalizationPatch.Diagnostics
         public void Set(bool value)
         {
             _cachedValue = value;
-            Volatile.Write(ref _lastCheckTicks, DateTime.UtcNow.Ticks);
+            Volatile.Write(ref _lastCheckMs, Environment.TickCount64);
         }
 
         // 热重载时使缓存立即失效，下次 Get 重新读取
         public void Reset()
         {
             _cachedValue = false;
-            Volatile.Write(ref _lastCheckTicks, 0L);
+            // 0 是 TickCount64 的起点，必然早于任何一次真实读取；调用点都在游戏启动之后，
+            // 开机时长早已超过冷却窗口，所以这里等价于「立即过期」
+            Volatile.Write(ref _lastCheckMs, 0L);
         }
 
         /*

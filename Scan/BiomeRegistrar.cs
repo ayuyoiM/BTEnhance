@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using BTitles;
 using BTitlesLocalizationPatch;
 using BTitlesLocalizationPatch.Diagnostics;
@@ -33,11 +34,13 @@ namespace BTitlesLocalizationPatch.Scan
         );
 
         // 同一群系 5 秒内最多告警一次，防止常抛异常的群系刷爆日志
+        // 时间基准与 TimedValueCache 一致用 TickCount64：系统时钟回拨会让 UtcNow 的差值变负，
+        // 冷却永远不满足，异常告警就再也不出现
         private static readonly ConcurrentDictionary<
             (string Mod, string Biome),
             long
-        > LastDetectionWarnTicks = new();
-        private static readonly TimeSpan DetectionWarnCooldown = TimeSpan.FromSeconds(5);
+        > LastDetectionWarnMs = new();
+        private const long DetectionWarnCooldownMs = 5000;
 
         // 扫描入场令牌：0=空闲（可扫描） 2=扫描进行中
         // Run 的调用方既有 PostSetupContent（后台线程）也有配置回调（主线程），
@@ -49,7 +52,32 @@ namespace BTitlesLocalizationPatch.Scan
         若扫描侧另收一份，两者就有两个真相，配置回调里的 UpdateStylingCache 一慢半拍就会各说各话
         统一从缓存读，调用方不必也不该再带一份
         */
+        /*
+        扫描入口。主线程来的调用（配置回调）甩到线程池，避免卡住 UI；
+        PostSetupContent 那条照旧在本线程执行。异常为何分层处理见 docs/PROJECT.md「线程模型」
+        */
         public static void Run(Mod mod)
+        {
+            if (Program.IsMainThread)
+            {
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        RunCore(mod);
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLog.Error(SafeFormat(Localize("ScanFailed"), ex.Message));
+                    }
+                });
+                return;
+            }
+
+            RunCore(mod);
+        }
+
+        private static void RunCore(Mod mod)
         {
             bool enableStyling = BiomeNameHook.IsStylingEnabled();
             bool onlyFillMissing = IsOnlyFillMissing();
@@ -544,11 +572,11 @@ namespace BTitlesLocalizationPatch.Scan
                         // 首次调用若用 now 作种子，now - now = 0 永远不够冷却，首见异常会被吞掉
                         string modName = sourceMod.Name;
                         string biomeName = biome.Name;
-                        long now = DateTime.UtcNow.Ticks;
-                        long lastTicks = LastDetectionWarnTicks.GetOrAdd((modName, biomeName), 0L);
-                        if (now - lastTicks >= DetectionWarnCooldown.Ticks)
+                        long now = Environment.TickCount64;
+                        long lastMs = LastDetectionWarnMs.GetOrAdd((modName, biomeName), 0L);
+                        if (now - lastMs >= DetectionWarnCooldownMs)
                         {
-                            LastDetectionWarnTicks[(modName, biomeName)] = now;
+                            LastDetectionWarnMs[(modName, biomeName)] = now;
                             DebugLog.Warn(
                                 SafeFormat(Localize("DetectionEx"), modName, biomeName, ex.Message)
                             );
@@ -633,7 +661,7 @@ namespace BTitlesLocalizationPatch.Scan
         */
         public static void Cleanup()
         {
-            LastDetectionWarnTicks.Clear();
+            LastDetectionWarnMs.Clear();
 
             var funcToRemove = RegisteredCheckFunc;
             if (funcToRemove == null)
@@ -674,7 +702,7 @@ namespace BTitlesLocalizationPatch.Scan
         internal static bool CleanupBlockingOnMainThread()
         {
             var funcToRemove = RegisteredCheckFunc;
-            LastDetectionWarnTicks.Clear();
+            LastDetectionWarnMs.Clear();
 
             if (funcToRemove != null && Program.IsMainThread)
             {

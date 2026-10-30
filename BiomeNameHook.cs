@@ -18,10 +18,7 @@ namespace BTitlesLocalizationPatch
     {
         // 只缓存不受 BTitles 配置影响的翻译链结果（步骤 1-3）
         // 自定义覆盖（步骤 4）每次重新查配置，保证配置变更即时生效
-        internal static readonly ConcurrentDictionary<
-            string,
-            (string Text, string Tag)
-        > TranslationCache = new();
+        internal static readonly ConcurrentDictionary<string, string> TranslationCache = new();
 
         // 群系数量有限（数百级），超限清空重建即可，无需复杂淘汰策略
         private const int MaxCacheEntries = 2048;
@@ -162,6 +159,10 @@ namespace BTitlesLocalizationPatch
             string safeScope = (biomeEntry.LocalizationScope ?? "").Replace(".", "_");
             bool hasValidKey = !string.IsNullOrEmpty(sanitizedKey);
 
+            // scope 为空时缓存键退化成 "|{key}"，不同模组的同名群系会串味，故不缓存。
+            // 与 hasValidKey 分开：能不能翻译只看 key。详见 docs/PROJECT.md「翻译回退链」的缓存策略
+            bool canCache = hasValidKey && !string.IsNullOrEmpty(safeScope);
+
             string cacheKey = $"{safeScope}|{sanitizedKey}";
             string currentCulture = Language.ActiveCulture.Name;
 
@@ -175,13 +176,11 @@ namespace BTitlesLocalizationPatch
             // 否则切颜色来源后 TranslationCache 未清，补色块被缓存早退短路，标题一直白色
             TryBackfillColor(biomeEntry);
 
-            if (hasValidKey && TranslationCache.TryGetValue(cacheKey, out var cachedEntry))
+            if (canCache && TranslationCache.TryGetValue(cacheKey, out var cachedEntry))
             {
-                string displayName =
-                    ApplyCustomOverride(cachedEntry.Text, config) ?? cachedEntry.Text;
-                string sourceTag = displayName == cachedEntry.Text ? cachedEntry.Tag : "CustomName";
-                LogBiomeEntry(biomeEntry.Key ?? "", displayName, biomeEntry, sourceTag);
-                return displayName;
+                // 命中缓存说明结果与上次一致，重复写三行只会刷满 client.log
+                // 详见 docs/PROJECT.md「调试日志系统」
+                return ApplyCustomOverride(cachedEntry, config) ?? cachedEntry;
             }
 
             string? baseText = null;
@@ -215,14 +214,14 @@ namespace BTitlesLocalizationPatch
             string? overridden = baseText != null ? ApplyCustomOverride(baseText, config) : null;
             if (overridden != null)
             {
-                if (hasValidKey && baseText != null)
-                    CacheEntry(cacheKey, baseText, baseTag ?? "Unknown");
+                if (canCache && baseText != null)
+                    CacheEntry(cacheKey, baseText);
                 LogBiomeEntry(biomeEntry.Key ?? "", overridden, biomeEntry, "CustomName");
                 return overridden;
             }
             if (baseText != null)
             {
-                LogAndCache(biomeEntry, cacheKey, hasValidKey, baseText, baseTag ?? "Unknown");
+                LogAndCache(biomeEntry, cacheKey, canCache, baseText, baseTag ?? "Unknown");
                 return baseText;
             }
 
@@ -364,22 +363,22 @@ namespace BTitlesLocalizationPatch
         private static string LogAndCache(
             BiomeEntry entry,
             string cacheKey,
-            bool hasValidKey,
+            bool canCache,
             string text,
             string tag
         )
         {
-            if (hasValidKey && !string.IsNullOrEmpty(text))
-                CacheEntry(cacheKey, text, tag);
+            if (canCache && !string.IsNullOrEmpty(text))
+                CacheEntry(cacheKey, text);
             LogBiomeEntry(entry.Key ?? "", text, entry, tag);
             return text;
         }
 
-        private static void CacheEntry(string cacheKey, string text, string tag)
+        private static void CacheEntry(string cacheKey, string text)
         {
             if (TranslationCache.Count >= MaxCacheEntries)
                 TranslationCache.Clear();
-            TranslationCache[cacheKey] = (text, tag);
+            TranslationCache[cacheKey] = text;
         }
 
         private static void LogBiomeEntry(string key, string text, BiomeEntry entry, string tag)

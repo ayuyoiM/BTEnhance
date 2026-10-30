@@ -156,6 +156,9 @@ namespace BTitlesLocalizationPatch
             _lastMappingsSignature = ComputeMappingsSignature(TitleColorMappings);
             _lastFilterMode = FilterMode;
             _lastFilterSignature = ComputeFilterSignature(ScanFilterList);
+
+            // 扫描侧只读快照（List 不能跨线程遍历），必须在 PostSetupContent 之前就位
+            Scan.BiomeFilter.RefreshSnapshot(this);
         }
 
         // 自动配色总开关：控制策略色的批量上色与图标采样；
@@ -291,15 +294,14 @@ namespace BTitlesLocalizationPatch
                 );
 
             /*
-            同一轮 Save 只能扫一次
-            扫描开关、仅补漏、扫描名单最终都落到「扫描要不要重来」上，逐项 if 会连扫多遍：
-            先 ApplyConfigChangeScan 扫一遍，再撤掉重扫一遍
-            - 扫描开关本身变了：交给 ApplyConfigChangeScan。它会重新扫，而
-              BiomeRegistrar.Run 里的 IsOnlyFillMissing() / BiomeFilter.Read() 都是扫描开始时现读配置，
-              所以同一轮里改的「仅补漏」和名单天然被这次扫描带上，不需要再扫一遍
-            - 扫描开关没变、只改了「仅补漏」或名单：它们是扫描期判定，必须「先撤再扫」，
-              不清掉 ScannedBiomes 就永远扫不成第二次
+            同一轮 Save 只能扫一次：扫描开关、仅补漏、名单最终都落到「扫描要不要重来」上，
+            逐项 if 会先扫一遍再撤掉重扫一遍。开关本身变了交给 ApplyConfigChangeScan；
+            开关没变、只改了仅补漏或名单时必须「先撤再扫」—— Run 有「已有结果就早退」，
+            不清掉 ScannedBiomes 就永远扫不成第二次。详见 docs/PROJECT.md「配置系统」
             */
+            // 快照必须在新一轮扫描启动前刷新：Run 会把主线程调用甩到线程池，晚一步就读到旧名单
+            Scan.BiomeFilter.RefreshSnapshot(this);
+
             if (scanChanged)
                 BTitlesLocalizationPatch.ApplyConfigChangeScan(scanCurrent);
             else if ((onlyFillChanged || filterChanged) && scanCurrent)

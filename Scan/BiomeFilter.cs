@@ -35,23 +35,37 @@ namespace BTitlesLocalizationPatch.Scan
     */
     internal static class BiomeFilter
     {
+        // 主线程维护的不可变快照：ScanFilterList 是 List，后台线程遍历它不安全。
+        // 刷新时机与线程归属见 docs/PROJECT.md「扫描名单」与「线程模型」
+        private static volatile HashSet<string> _snapshotEntries = new(
+            StringComparer.OrdinalIgnoreCase
+        );
+        private static volatile ScanFilterMode _snapshotMode = ScanFilterMode.Disabled;
+
+        /*
+        刷新快照，只能在主线程调用（OnLoaded / OnChanged）
+        config 显式传入而非内部 GetInstance：OnLoaded 期间配置未必已注册进 ModContent
+        */
+        internal static void RefreshSnapshot(BTitlesConfig? config = null)
+        {
+            config ??= ModContent.GetInstance<BTitlesConfig>();
+            if (config == null || config.FilterMode == ScanFilterMode.Disabled)
+            {
+                _snapshotEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _snapshotMode = ScanFilterMode.Disabled;
+                return;
+            }
+
+            // BuildSet 每次返回新实例，发布后不再修改：读方看到的就是一份固定内容
+            _snapshotEntries = BuildSet(config.ScanFilterList);
+            _snapshotMode = config.FilterMode;
+        }
+
         /*
         扫描开始时读一次，整轮共用
-        名单是低频读取（只在扫描入口读），不做「保存即失效」的快照缓存：
-        改完名单由 OnChanged 走「先撤再扫」，扫描侧自然读到最新值
+        只读快照，不碰配置里的 List（原因见 _snapshotEntries）
         */
-        internal static FilterSnapshot Read()
-        {
-            var config = ModContent.GetInstance<BTitlesConfig>();
-            if (config == null)
-                return FilterSnapshot.Empty;
-
-            // 模式关闭时连集合都不建：表里留着的内容不该在关掉开关后继续偷偷生效
-            if (config.FilterMode == ScanFilterMode.Disabled)
-                return FilterSnapshot.Empty;
-
-            return new FilterSnapshot(config.FilterMode, BuildSet(config.ScanFilterList));
-        }
+        internal static FilterSnapshot Read() => new(_snapshotMode, _snapshotEntries);
 
         internal static BiomeFilterVerdict Evaluate(
             FilterSnapshot snapshot,
@@ -116,11 +130,6 @@ namespace BTitlesLocalizationPatch.Scan
 
         internal sealed class FilterSnapshot
         {
-            internal static readonly FilterSnapshot Empty = new(
-                ScanFilterMode.Disabled,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            );
-
             internal FilterSnapshot(ScanFilterMode mode, HashSet<string> entries)
             {
                 Mode = mode;

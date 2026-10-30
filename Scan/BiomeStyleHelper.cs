@@ -17,7 +17,7 @@ namespace BTitlesLocalizationPatch.Scan
     {
         /*
         读取配色策略与固定颜色（来自 ModConfig）
-        这里用 ?. 兜底：配置未加载（Mod.Load 前/卸载中）时退回默认策略 —— 背景色 + 白色
+        这里用 ?. 兜底：配置未加载（Mod.Load 前/卸载中）时退回默认策略 —— 背景色优先 + 白色
         应用点在扫描（后台线程）与配色刷新（主线程），都不属于每帧热路径，故不做冷却缓存
         */
         public static (TitleColorSource Source, Color FixedColor) GetStylingSettings()
@@ -27,7 +27,9 @@ namespace BTitlesLocalizationPatch.Scan
             // 用户没动过固定颜色时是初始透明/黑，兜成白色，避免 Fixed 策略下标题整个不可见
             if (fixedColor == default)
                 fixedColor = Color.White;
-            return (config?.PreferredColorSource ?? TitleColorSource.BackgroundColor, fixedColor);
+            // 配置实例取不到时回落到与 BTitlesConfig 默认值一致的策略，
+            // 不要另立一套：否则「配置未加载」与「配置为默认」会给出两种颜色行为
+            return (config?.PreferredColorSource ?? TitleColorSource.BackgroundColorSampling, fixedColor);
         }
 
         /*
@@ -127,8 +129,8 @@ namespace BTitlesLocalizationPatch.Scan
         策略语义：
         - Fixed：一律返回用户挑的固定颜色，不采样
         - IconSampling：一律登记采样（不管有没有背景色），初始白色占位，主线程补图标平均色
-        - BackgroundColor（默认）：只用背景色，没有则纯白，不采样
-        - BackgroundColorSampling：背景色优先；没有背景色或背景色是白色时回落图标采样
+        - BackgroundColor：只用背景色，没有则纯白，不采样
+        - BackgroundColorSampling（默认）：背景色优先；没有背景色或背景色接近白色时回落图标采样
         */
         public static Color GetTitleColors(
             ModBiome? biome,
@@ -139,8 +141,10 @@ namespace BTitlesLocalizationPatch.Scan
         {
             needsSampling = false;
 
+            // fixedColor 的归一化（全零 → 白）由 GetStylingSettings 统一负责，这里不再重复兜底：
+            // 同一件事写两遍，将来改口径必定漏掉一处
             if (source == TitleColorSource.Fixed)
-                return fixedColor == default ? Color.White : fixedColor;
+                return fixedColor;
 
             if (biome == null)
                 return Color.White;
@@ -153,9 +157,9 @@ namespace BTitlesLocalizationPatch.Scan
 
             if (source == TitleColorSource.BackgroundColorSampling)
             {
-                // 背景色优先；没有背景色或背景色就是白色时，回落图标采样
-                if (biome.BackgroundColor.HasValue && biome.BackgroundColor.Value != Color.White)
-                    return biome.BackgroundColor.Value;
+                // 背景色优先；没有背景色或背景色接近白色时，回落图标采样
+                if (biome.BackgroundColor is { } background && !IsNearWhite(background))
+                    return background;
 
                 needsSampling = true;
                 return Color.White;
@@ -168,9 +172,18 @@ namespace BTitlesLocalizationPatch.Scan
             return Color.White;
         }
 
+        // 「白色背景」只比 RGB 并留容差：纯白判定会漏掉近白与带 alpha 的白，
+        // 它们会被当成标题色，刷出近乎看不见的字。详见 docs/PROJECT.md「自动配色系统」
+        private const byte NearWhiteThreshold = 245;
+
+        private static bool IsNearWhite(Color color) =>
+            color.R >= NearWhiteThreshold
+            && color.G >= NearWhiteThreshold
+            && color.B >= NearWhiteThreshold;
+
         /*
-        尝试加载 BestiaryIcon
-        加载失败时静默返回 null，不影响群系注册流程
+        尝试加载 BestiaryIcon，失败静默返回 null
+        用 ImmediateLoad 而非 AsyncLoad 是刻意取舍，理由与替代方案见 docs/PROJECT.md「运行时补色」
         */
         public static Texture2D? TryLoadIcon(ModBiome? biome)
         {
@@ -202,6 +215,13 @@ namespace BTitlesLocalizationPatch.Scan
 
         // 低于这个色度（三通道极差）的像素视为灰调：描边、阴影、单色背景多落在这里
         private const int MinChroma = 24;
+
+        // 低于这个 alpha 的像素视为半透明：图标阴影与描边多落在这里，采进来会让标题发灰
+        private const byte MinOpaqueAlpha = 128;
+
+        // R+G+B 的范围是 0..765，两端作标题色都看不清（纯黑糊在背景里、纯白刺眼）
+        private const int MinBrightnessSum = 30;
+        private const int MaxBrightnessSum = 720;
 
         /*
         平均色的饱和度增益
@@ -246,10 +266,49 @@ namespace BTitlesLocalizationPatch.Scan
                     0,
                     pixelCount
                 );
+
+                long sumR = 0,
+                    sumG = 0,
+                    sumB = 0;
+                int validCount = 0;
+
+                // 处理段必须同样以 pixelCount 为界，不能整个 span 走完借来的数组
+                foreach (ref Color pixel in pixels.AsSpan(0, pixelCount))
+                {
+                    // 跳过半透明像素：图标阴影与描边多为低 alpha，采进来会让标题发灰
+                    if (pixel.A < MinOpaqueAlpha)
+                        continue;
+                    // 跳过接近纯黑与纯白：这两端作标题色都看不清
+                    int brightness = pixel.R + pixel.G + pixel.B;
+                    if (brightness < MinBrightnessSum || brightness > MaxBrightnessSum)
+                        continue;
+
+                    // 跳过灰调：三通道几乎相等时它对「这团颜色是什么色」没有信息量，
+                    // 却常常是图标里面积最大的部分，留着会把平均色整体拉向灰
+                    int max = Math.Max(pixel.R, Math.Max(pixel.G, pixel.B));
+                    int min = Math.Min(pixel.R, Math.Min(pixel.G, pixel.B));
+                    if (max - min < MinChroma)
+                        continue;
+
+                    sumR += pixel.R;
+                    sumG += pixel.G;
+                    sumB += pixel.B;
+                    validCount++;
+                }
+
+                // 全是灰调/半透明/极端亮度：这个图标给不出颜色，交给调用方的灰色兜底
+                if (validCount == 0)
+                    return Color.Gray;
+
+                var average = new Color(
+                    (byte)(sumR / validCount),
+                    (byte)(sumG / validCount),
+                    (byte)(sumB / validCount)
+                );
+                return BoostSaturation(average);
             }
             catch (Exception ex)
             {
-                ArrayPool<Color>.Shared.Return(pixels);
                 DebugLog.Warn(
                     Language.GetTextValue(
                         $"Mods.{nameof(BTitlesLocalizationPatch)}.Logs.SampleColorFailed",
@@ -260,49 +319,12 @@ namespace BTitlesLocalizationPatch.Scan
                 );
                 return Color.Gray;
             }
-
-            long sumR = 0,
-                sumG = 0,
-                sumB = 0;
-            int validCount = 0;
-
-            // 处理段必须同样以 pixelCount 为界，不能整个 span 走完借来的数组
-            foreach (ref Color pixel in pixels.AsSpan(0, pixelCount))
+            finally
             {
-                // 跳过半透明像素：图标阴影与描边多为低 alpha，采进来会让标题发灰
-                if (pixel.A < 128)
-                    continue;
-                // 跳过接近纯黑与纯白：R+G+B 范围为 0..765，这两端作标题色都看不清
-                int brightness = pixel.R + pixel.G + pixel.B;
-                if (brightness < 30 || brightness > 720)
-                    continue;
-
-                // 跳过灰调：三通道几乎相等时它对「这团颜色是什么色」没有信息量，
-                // 却常常是图标里面积最大的部分，留着会把平均色整体拉向灰
-                int max = Math.Max(pixel.R, Math.Max(pixel.G, pixel.B));
-                int min = Math.Min(pixel.R, Math.Min(pixel.G, pixel.B));
-                if (max - min < MinChroma)
-                    continue;
-
-                sumR += pixel.R;
-                sumG += pixel.G;
-                sumB += pixel.B;
-                validCount++;
+                // 放在 finally 而不是每条返回路径各写一次：以后新增早退分支也不会漏归还，
+                // 漏一次就是一份 256KB 的池外分配
+                ArrayPool<Color>.Shared.Return(pixels);
             }
-
-            // 借来的数组必须归还，否则每次采样都会泄漏一份 256KB
-            ArrayPool<Color>.Shared.Return(pixels);
-
-            // 全是灰调/半透明/极端亮度：这个图标给不出颜色，交给调用方的灰色兜底
-            if (validCount == 0)
-                return Color.Gray;
-
-            var average = new Color(
-                (byte)(sumR / validCount),
-                (byte)(sumG / validCount),
-                (byte)(sumB / validCount)
-            );
-            return BoostSaturation(average);
         }
 
         /*
