@@ -206,7 +206,7 @@ jobs:
       # 上游 BTitles 自己有一批 CS0618 / CS0162 / ChangeMagicNumberToID 警告，压不住也不该压。
       # 这里只对本模组自己的警告零容忍。
       #
-      # 正则里必须是 [^(:]* 而不是 [^/]+：本项目源码分布在根目录、Scan/、config/ 三层，
+      # 正则里必须是 [^(:]* 而不是 [^/]+：本项目源码分布在 src/、src/Scan/、src/config/ 三层，
       # 用「不允许分隔符」的写法会把子目录里的 warning 全部漏掉。
       - name: Fail on warnings from this mod
         shell: bash

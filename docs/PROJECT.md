@@ -24,11 +24,22 @@ BTitles 是一个手动维护群系名称的模组，显示玩家当前所在生
 
 ```t
 BTitlesLocalizationPatch/                  # 文件夹名 = 内部名，不可随意改
-├── BTitlesLocalizationPatch.cs           # Mod 主入口：生命周期、Hook 安装、配置变更响应
-├── BiomeNameHook.cs                      # GetActualTitleName 的 Hook 替换逻辑（翻译链核心 + 逐群系配色）
-├── GetActualTitleNameHookInstaller.cs    # Hook 安装/卸载（MonoMod.RuntimeDetour.Hook 包装）
-├── BTitlesIncompatibleException.cs       # BTitles 版本不兼容异常
-├── BiomeEntryReferenceComparer.cs        # BiomeEntry 的引用相等比较器（扫描侧与 Hook 侧共用）
+├── src/                                  # 全部 .cs 源码；csproj 无 Compile 项，走 SDK 默认 **/*.cs 通配
+│   ├── BTitlesLocalizationPatch.cs       # Mod 主入口：生命周期、Hook 安装、配置变更响应
+│   ├── BiomeNameHook.cs                  # GetActualTitleName 的 Hook 替换逻辑（翻译链核心 + 逐群系配色）
+│   ├── GetActualTitleNameHookInstaller.cs # Hook 安装/卸载（MonoMod.RuntimeDetour.Hook 包装）
+│   ├── BTitlesIncompatibleException.cs   # BTitles 版本不兼容异常
+│   ├── BiomeEntryReferenceComparer.cs    # BiomeEntry 的引用相等比较器（扫描侧与 Hook 侧共用）
+│   ├── Scan/
+│   │   ├── BiomeRegistrar.cs             # 自动扫描注册、检测函数构建、回滚/清理
+│   │   ├── BiomeStyleHelper.cs           # 配色策略、逐群系配色表、图标加载、代表性颜色采样
+│   │   ├── BiomeFilter.cs                # 扫描名单（模式 + 单表）读取与匹配
+│   │   └── LanguageChangeSystem.cs       # 语言切换接收点（OnLocalizationsLoaded）：清翻译缓存 + 重算已扫描标题
+│   └── config/
+│       ├── ModConfig.cs                  # BTitlesConfig + BiomeColorMapping：扫描/配色/调试开关
+│       ├── TimedValueCache.cs            # 带冷却的配置值缓存（StylingCache 等）
+│       └── DebugLog.cs                   # 调试日志工具（带冷却缓存、三级分流）
+│
 ├── BTitlesLocalizationPatch.csproj       # 项目引用（BTitles）
 ├── build.txt                             # 模组元数据（v1.4.2.2、modReferences=BTitles）
 ├── changelog.txt                         # 更新日志
@@ -43,21 +54,10 @@ BTitlesLocalizationPatch/                  # 文件夹名 = 内部名，不可�
 ├── .vscode/                              # 编辑器配置（launch.json、settings.json）
 ├── Properties/                           # launchSettings.json
 ├── README.md                             # 工坊介绍页
-├── AGENTS.md                             # AI 协作文档：规则 / 当前状态 / 变更流水
 ├── docs/
+│   ├── AGENTS.md                         # AI 协作文档：规则 / 当前状态 / 变更流水
 │   ├── PROJECT.md                        # 本文件：架构、生命周期、配置与决策记录
 │   └── ai-log-archive.md                 # AI 工作流水归档（AGENTS.md 流水溢出的旧条目）
-│
-├── Scan/
-│   ├── BiomeRegistrar.cs                 # 自动扫描注册、检测函数构建、回滚/清理
-│   ├── BiomeStyleHelper.cs               # 配色策略、逐群系配色表、图标加载、代表性颜色采样
-│   ├── BiomeFilter.cs                    # 扫描名单（模式 + 单表）读取与匹配
-│   └── LanguageChangeSystem.cs           # 语言切换接收点（OnLocalizationsLoaded）：清翻译缓存 + 重算已扫描标题
-│
-├── config/
-│   ├── ModConfig.cs                      # BTitlesConfig + BiomeColorMapping：扫描/配色/调试开关
-│   ├── TimedValueCache.cs                # 带冷却的配置值缓存（StylingCache 等）
-│   └── DebugLog.cs                       # 调试日志工具（带冷却缓存、三级分流）
 │
 └── Localization/
     ├── en-US_Mods.BTitlesLocalizationPatch.hjson     # 英文本地化（模板，不可删键）
@@ -227,7 +227,7 @@ Unload()
 
 - 翻译链结果（步骤 1-3）缓存到 `ConcurrentDictionary`，下次直接命中
 - 步骤 4 自定义覆盖每次重新查配置，保证配置变更即时生效
-- 语言切换时清空全缓存（`Scan/LanguageChangeSystem.cs`，见下）
+- 语言切换时清空全缓存（`src/Scan/LanguageChangeSystem.cs`，见下）
 - **缓存键要求 `LocalizationScope` 非空**：键形如 `{scope}|{key}`，scope 为空时退化成
   `|{key}`，两个模组若都没带作用域、群系短名又恰好相同，就会共用同一条缓存——表现为
   A 群系显示 B 群系的名字。这类条目极少，不缓存、每次走完整解析链的代价可以忽略。
@@ -239,12 +239,12 @@ Unload()
 
 **语言切换的处理**：
 
-`BiomeEntry.Title` 是扫描那一刻按当时语言烤进去的字符串（`Scan/BiomeRegistrar.cs:339`
+`BiomeEntry.Title` 是扫描那一刻按当时语言烤进去的字符串（`src/Scan/BiomeRegistrar.cs:339`
 `modBiome.DisplayName.Value`）。BTitles 回退链的最后一步直接返回它（`BiomeTitlesUI.cs:511`），
 所以源模组没有目标语言译文时，漏出来的是上次扫描时的语言。只清翻译缓存不够，
 必须把 `Title` 按新语言重算。
 
-接收点只有一个：`Scan/LanguageChangeSystem.cs`（`ModSystem` 子类）覆写
+接收点只有一个：`src/Scan/LanguageChangeSystem.cs`（`ModSystem` 子类）覆写
 `OnLocalizationsLoaded()`。tML 在 `LanguageManager.ReloadLanguage` 末尾统一分发
 （`LanguageManager.cs.patch:72`），切语言、语言文件热重载、加载期灌值都会走到；
 此刻 `RecalculateBoundTextValues` 已跑过，`DisplayName.Value` 已是新语言的值。
@@ -351,7 +351,7 @@ player => {
 
 ### 6.7 扫描名单（黑名单 / 白名单）
 
-`Scan/BiomeFilter.cs`，配置为 `BTitlesConfig.FilterMode`（`ScanFilterMode`）+ **一张**表
+`src/Scan/BiomeFilter.cs`，配置为 `BTitlesConfig.FilterMode`（`ScanFilterMode`）+ **一张**表
 `ScanFilterList`（`List<BiomeFilterEntry>`）。
 
 **一张表 + 一个模式**：模式决定这张表这一轮被解释成黑名单还是白名单。
@@ -423,7 +423,7 @@ BuildNewEntry()
 
 BackgroundColor 的语义在 1.4.1.1 变过：旧行为是「无背景色 → 白色 + 采样」，
 现在「无背景色 → 纯白，不采样」；想要背景色优先 + 回落采样的旧行为，选 BackgroundColorSampling。
-默认值是 `BackgroundColorSampling`（`config/ModConfig.cs` 的 `[DefaultValue]`），
+默认值是 `BackgroundColorSampling`（`src/config/ModConfig.cs` 的 `[DefaultValue]`），
 README 曾一度写成「背景色」，以代码为准。
 
 **「白色」判定按 RGB 比、留容差（`NearWhiteThreshold = 245`）**：
@@ -560,7 +560,7 @@ GetActualTitleNameHook
 - 记录上次值 `_lastAutoStyling` / `_lastScan` / `_lastColorSource` / `_lastFixedColor` /
   `_lastOnlyFillMissing` / `_lastMappingsSignature` / `_lastFilterMode` /
   `_lastFilterSignature`，仅变化时执行
-- **首轮基线由 `OnLoaded` 建立**（`config/ModConfig.cs:87-95`）：tML 在 `ConfigManager.Add`
+- **首轮基线由 `OnLoaded` 建立**（`src/config/ModConfig.cs:87-95`）：tML 在 `ConfigManager.Add`
   （注册期，早于 `Mod.Load`）就会调一次 `OnChanged`，那次被 `LoadCompleted` 早退挡住；
   但菜单保存（`OnChangedAll`）与游戏内保存触发时模组已加载，`_last*` 若停在 C# 默认值
   （`false` / 透明黑 / 签名 0），首轮必然把「默认开着」误判成「刚被打开」，平白跑一次
@@ -733,13 +733,13 @@ BTitlesLocalizationPatch
 | 配色表 alpha | 完全放开，填什么用什么；仅全零 `(0,0,0,0)` 视为未填 | 沿用 `[ColorNoAlpha]` 强制不透明 | 半透明标题是合法需求，锁死 A 通道等于替玩家做决定。改成「全零=未填」后，默认值仍是不透明白，未填与已填的分界没有丢（v1.4.1.1 放开） |
 | 配色还原的落点 | 并进 `UnregisterScannedBiomes` 的主线程段 | 在 `Unload` 里直接写字典 | 那写的是 BTitles 的共享状态，与快照还原是同一次主线程作业，分两处做就有一条没在主线程上（v1.4） |
 | 逐条跳过日志的通道 | `DebugLog.Info`（受开关控制） | `mod.Logger.Info` | 开「仅补漏」时被跳过的可能有上百条，无条件写会把正常日志淹掉；总数 `ScanSummary` 里已有（v1.4） |
-| `BiomeEntry` 相等语义 | 独立的 `BiomeEntryReferenceComparer`（根命名空间） | 放在 `Scan/` 里由 Hook 侧引用 | 扫描侧与 Hook 侧用的是同一套语义，谁都不该依赖对方的内部类型（v1.4） |
+| `BiomeEntry` 相等语义 | 独立的 `BiomeEntryReferenceComparer`（根命名空间） | 放在 `src/Scan/` 里由 Hook 侧引用 | 扫描侧与 Hook 侧用的是同一套语义，谁都不该依赖对方的内部类型（v1.4） |
 | 配置即时生效 | OnChanged 事件 | 需重载模组 | 更好的用户体验 |
 | OnChanged 首轮误报防护 | `OnLoaded` 快照实际加载值到 `_last*` | 硬编码 `true` / 保持 C# 默认值 | tML 在 `ConfigManager.Add`（注册期，早于 Mod.Load）就调一次 OnChanged，此时 LoadCompleted 早退挡住；但菜单保存（OnChangedAll）与游戏内保存触发时模组已加载，若 `_last*` 停在 C# 默认值（false/透明黑），首轮必然把「默认开着」误判成「刚被打开」，平白跑一次全量扫描与重配色。OnLoaded 快照兼容旧存档非默认取值，不硬编码（v1.4.1.1） |
 | onlyFillMissing 不进 allBiomes | `allBiomes.Add` 挪进 `RegisterOrUpdateBiome` 的三个被追踪分支 | 主循环无条件 Add | 检测函数由本模组插在最前；仅补漏跳过的条目不写 keyMapping，lambda 回落返回短键 `biome.Name`，BTitles 字典只有命名空间键时 TryGetValue miss → `_currentBiomeEntry=null` → BTitles 原本能显示的群系消失（v1.4.1.1） |
 | Load 阶段日志为何是英文字面量 | `LoadCalledTwice`/`HookApplied` 保留英文硬编码 | 本地化键 | tML 管线（ModContent.Load）：`mod.Autoload()`（内部 `LocalizationLoader.Autoload` 只 `GetOrRegister` 注册键，值为 key 本身）→ `mod.Load()` → MSSetupContent 才 `ReloadLanguage` 灌入 hjson 值（LanguageManager.ReloadLanguage → LoadModTranslations）。Load 阶段 `Language.GetTextValue` 只会原样吐出键名如 `Mods.BTitlesLocalizationPatch.Logs.HookApplied`。Unload 及运行期日志（HookDisposeFailed、CleanupRemoveCheckFuncFailed）不受影响，走本地化（v1.4.1.1） |
 | 图标补色的位置 | `TryBackfillColor` 在翻译缓存命中判断**之前**调用 | 放在缓存判断之后（原实现） | 缓存命中路径直接 return，不经过后面的解析链；把补色放在缓存判断之后，切换颜色来源时（`TranslationCache` 不清）补色会被缓存早退短路，标题一直白色。配色回调「不丢翻译缓存」的设计不变，只挪补色位置（v1.4.1.1） |
-| 语言切换的接收点 | `ModSystem.OnLocalizationsLoaded()`（`Scan/LanguageChangeSystem.cs`） | 在各处判断 `Language.ActiveCulture` 变化后各自清理 | tML 在 `LanguageManager.ReloadLanguage` 末尾统一分发，切语言、语言文件热重载、加载期灌值都会走到；散在各处判文化名必漏其中一条路径。只清翻译缓存不够——`BiomeEntry.Title` 是扫描时烤进去的字符串，必须按新语言重算（v1.4.1.3） |
+| 语言切换的接收点 | `ModSystem.OnLocalizationsLoaded()`（`src/Scan/LanguageChangeSystem.cs`） | 在各处判断 `Language.ActiveCulture` 变化后各自清理 | tML 在 `LanguageManager.ReloadLanguage` 末尾统一分发，切语言、语言文件热重载、加载期灌值都会走到；散在各处判文化名必漏其中一条路径。只清翻译缓存不够——`BiomeEntry.Title` 是扫描时烤进去的字符串，必须按新语言重算（v1.4.1.3） |
 | 无图标条目的出队 | `ApplyWrites` 里 `TryLoadIcon` 返回 null 即 `PendingColorKeys.TryRemove` | 留在队列等图标到位 | 没有图标资产的群系（如 InfernumMode/StarsAhead 部分条目）永远等不到图标，只会无限占队列、被 `ScanSummary` 计成「未配色」；真有图标的群系下次扫描会重新登记（v1.4.1.1） |
 | 配色策略四选一 | `BackgroundColorSampling`（背景色优先，无背景或背景为白时回落采样） | 只保留三策略 | 「背景色优先 + 回落采样」是很多模组图标的实际形态：有背景色用背景色，没有才值得采图标。三策略表达不了这个组合（v1.4.1.1） |
 | `BackgroundColor` 语义收紧 | 无背景色 → 纯白，**不采样** | 沿用旧行为（无背景 → 白色 + 采样） | 「背景色」的名字就该只管背景色；回落采样的需求拆给 `BackgroundColorSampling` 表达，两个策略各管各的语义。旧行为用户迁移：选「背景色优先」（v1.4.1.1） |

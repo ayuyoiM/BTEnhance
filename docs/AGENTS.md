@@ -74,7 +74,7 @@
 
 ### 0.5 与 docs/PROJECT.md 的边界
 
-|          | AGENTS.md（本文件，根目录） | docs/PROJECT.md                              |
+|          | AGENTS.md（本文件，docs/ 下） | docs/PROJECT.md                              |
 |----------|-----------------------------|----------------------------------------------|
 | 面向     | AI 为主                     | 人类读者                                     |
 | 内容     | 变更、决策、坑、当前状态    | 架构真相、文件结构、生命周期、回退链、配置表 |
@@ -151,10 +151,10 @@ dotnet build
 - 版本：v1.4.2.2（`build.txt`）
 - 显示名：Biome Titles Enhance / 生物群系标题增强
 - 内部名：`BTitlesLocalizationPatch`（文件夹 / 程序集 / 本地化键前缀，不可改，见「活跃的坑」）
-- 分支：`main`，与 `origin/main` 同步；工作区有未提交改动（本轮跨线程与时钟修复 + 文档，见「流水」）
+- 分支：`main`，与 `origin/main` 同步；工作区有未提交改动（源码迁入 `src/` + 文档同步，见「流水」）
 - 最近提交：`1d22e59` tmodloader更新本地化
 - 依赖：BTitles（`modReferences`）、tModLoader、.NET 8.0
-- 文档：`AGENTS.md`（本文件，根目录）、`docs/PROJECT.md`（架构地图）、`docs/ai-log-archive.md`（流水归档）、`README.md`（工坊页）
+- 文档：`AGENTS.md`（本文件，docs/ 下）、`docs/PROJECT.md`（架构地图）、`docs/ai-log-archive.md`（流水归档）、`README.md`（工坊页）
 - CI：`.github/workflows/build.yml`（`build` = ubuntu-latest + bash，`localization` = ubuntu-latest）
 
 ### 1.2 进行中
@@ -300,3 +300,38 @@ StarsAbove 用 `en-US.hjson`（prefix 为空），NoxusBoss 用 `en-US/Mods.X.hj
   动过配置路径，需进游戏改一次名单与配色表确认
 - 已提交 `c16ddba`（13 文件，+1327/−121）；版本号 1.4.2 → 1.4.2.1，附注 tag `1.4.2.1`
   打在发布提交上（本地，未 push）
+
+### 2026-10-31 · 源码迁入 `src/`，文档同步
+
+改动
+
+- 12 个 `.cs` 全部迁入 `src/`，用 `git mv` 保留 rename 历史：根目录 5 个平移进 `src/`，
+  `Scan/` → `src/Scan/`、`config/` → `src/config/`；`Localization/`、`Properties/`、`docs/`、
+  `.github/` 原地不动
+- `BTitlesLocalizationPatch.csproj` **未改**：`tMLMod.targets` 里没有任何 `Compile Include`，
+  编译项走 .NET SDK 默认 `**/*.cs` 递归通配。加显式 `Include` 反而会重复包含
+- `docs/PROJECT.md` —— 「文件结构」树重画（`src/` 置顶并标注 csproj 无 Compile 项）；
+  正文 8 处行内路径补 `src/` 前缀；`AGENTS.md` 从根目录归位到 `docs/`
+- `docs/AGENTS.md` —— 两处「本文件，根目录」改为「docs/ 下」
+- `.github/workflows/build.yml` —— warning 过滤正则的注释由「根目录、Scan/、config/ 三层」
+  改为「src/、src/Scan/、src/config/ 三层」。正则本身 `[^(:]*` 允许斜杠，逻辑无需改
+
+为什么
+
+根目录 5 个源码文件夹在元数据、图标、文档之间，扫一眼分不清哪些是代码；集中到 `src/` 后目录职责单一。
+
+没选「摊平到 `src/` 根下」：`Scan/`（扫描侧）与 `config/`（配置与诊断）的分层有意义，
+扁平化会让 12 个文件平铺，层级信息只剩 namespace 里那点线索。
+
+不需要「根目录留入口文件」：tML 靠反射扫描程序集里继承 `Mod` 的类找主类，不认文件名与路径；
+`BuildMod` 目标传的是 `-build $(ProjectDir) -eac $(TargetPath)`，只认「目录」和「产物」。
+
+验证
+
+- `dotnet build -c Release -t:Rebuild` → 0 错误；54 个警告全部来自 `BTitles.csproj`
+  （CS0618 / CS0162 / CS0414 / ChangeMagicNumberToID），本项目零警告，CI 零容忍门禁不受影响
+- 从 `-t:CoreCompile -v:detailed` 日志提取 csc 源文件清单：12 个文件全部为 `src\...` 路径，
+  且无「旧根路径 + src 新路径」双份编译。该失败模式表现为 CS0101 重复定义或 Hook 装到两个同名类型
+- 用户已实测游戏内编译通过
+- 踩坑记录：`FileListAbsolute.txt` 只记输出文件不记源文件，不能用来验证源码是否被编译；
+  `dotnet msbuild -getItem:Compile` 被安全策略按 LOLBin 拦截，改用 detailed 日志 grep
