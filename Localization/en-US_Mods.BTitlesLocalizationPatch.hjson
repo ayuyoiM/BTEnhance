@@ -10,23 +10,23 @@ Logs: {
 	CleanupRemoveCheckFuncFailed: Cleanup: failed to remove check func - {0}
 	ConfigNull: BTitlesConfig is null, scan skipped
 	CustomOverride: Custom override: {0} → {1}
-	DefaultColorMarker: (default color)
+	DefaultColorMarker: (not yet colored)
 	DetectionEx: Exception detecting {0}.{1}: {2}
 	EnUsMapFailed: Failed to build en-US source map for mod [{0}]: {1}
 	FormatError: Failed to format log template: template="{0}" error={1}
 	HookDisposeFailed: Hook Dispose failed: {0}
-	HookMethodMissing: BiomeTitlesUI.GetActualTitleName not found; the patch cannot work and refused to load
+	HookMethodMissing: BTitles' BiomeTitlesUI.GetActualTitleName not found; the patch cannot work and refused to load
 	IconLoadFailed: Failed to load icon for biome [{0}]: {1}
 	// Icons
 	IconNull: no
 	IconPresent: yes ({0}x{1})
 	// Features
-	NativeTitleFailed: BTitles native title lookup failed for [{0}]: {1}
+	NativeTitleFailed: BTitles native title lookup failed for [{0}]: error {1}
 	NewBiome: New biome: [{0}] → {1}{2}
 	RefreshFailed: Failed to refresh the current title: {0}
 	RefreshUnavailable: Cannot refresh the current title (BTitles UI fields not found); new colors apply on the next biome change
 	RescanOnFilterChanged: List settings changed, rescanning
-	RescanOnOnlyFillMissing: Only fill missing changed, rescanning
+	RescanOnOnlyFillMissing: The "Only fill missing" setting changed, rescanning
 	RestoredBiomes: Restored original titles for {0} existing biome(s)
 	RestyledOff: Reset colors for {0} biomes
 	RestyledOn: Restyled {0} biomes
@@ -39,7 +39,7 @@ Logs: {
 	ScanEnabled: Biome auto-scan enabled, starting scan...
 	ScanFailed: Biome scan failed, registration could not complete; the patch refused to load
 	ScanningMod: Scanning mod [{0}] with {1} ModBiomes
-	ScanSummary: Scan done: {0} added ({5} pending color), {1} updated, {2} skipped | {3} entries, {4} checks
+	ScanSummary: Scan done: {0} added ({5} pending color), {1} updated, {2} skipped | {3} entries in the dictionary, {4} checks
 	ScanTargetMissing: BTitles scan target not found; the patch cannot work and refused to load
 	ScanToggleOff: Scan disabled, unregistering registered biomes
 	ScanToggleOn: Scan enabled, starting scan
@@ -57,7 +57,7 @@ SourceTags: {
 	CustomName: Custom
 	ModLocalization: Source Mod
 	BTitles: Biome Titles
-	ExtraTitles: Extra
+	ExtraTitles: Extra translation
 	Fallback: Default
 }
 
@@ -73,7 +73,7 @@ Configs: {
 
 		EnableScan: {
 			Label: Scan for new biomes
-			Tooltip: Scan for ModBiome in each module that were not included in the original module, and add them to the detection list
+			Tooltip: Scan each mod for ModBiomes not registered by that mod, and add them to the detection list
 		}
 
 		EnableAutoStyling: {
@@ -87,7 +87,7 @@ Configs: {
 
 		EnableDebugLog: {
 			Label: Debug logs
-			Tooltip: Output the biome to client.log
+			Tooltip: Output debug logs to the console
 		}
 
 		PreferredColorSource: {
@@ -95,15 +95,16 @@ Configs: {
 			Tooltip:
 				'''
 				Where the title color comes from.
-				- BackgroundColor: use the color the biome declares for its bestiary background.
-				- IconSampling: sample the representative color from the icon (the average of its valid pixels); biomes whose icon failed to load stay white;
-				- Fixed: always use the fixed color below
+				- Background color: use the color the biome declares for its bestiary background.
+				- Background first: use the declared background color when there is one; fall back to icon sampling when there is no background color or it is white;
+				- Icon sampling: sample the representative color from the icon (the average of its valid pixels); biomes whose icon failed to load stay white;
+				- Fixed color: always use the fixed color below
 				'''
 		}
 
 		FixedTitleColor: {
 			Label: Fixed title color
-			Tooltip: Used only when the color source is "Fixed"
+			Tooltip: Used only when the color source is "Fixed color"
 		}
 
 		OnlyFillMissingBiomes: {
@@ -136,8 +137,8 @@ Configs: {
 			Label: Per-biome title colors
 			Tooltip:
 				'''
-				Override the color source for specific biomes,
-				matched against the title as it is displayed on screen.
+				Override the color source for specific biomes.
+				Titles are matched as they are displayed on screen.
 				A match wins over the color source above
 				'''
 		}
@@ -179,7 +180,7 @@ Configs: {
 
 		Whitelist: {
 			Label: Whitelist
-			Tooltip: Only biomes in the whitelist are scanned, the rest are skipped; an empty whitelist scans every biome
+			Tooltip: Only biomes in the whitelist are scanned, and the rest are skipped; an empty whitelist scans every biome
 		}
 
 		Tooltip: ""
@@ -188,7 +189,7 @@ Configs: {
 	TitleColorSource: {
 		BackgroundColor: {
 			Label: Background color
-			Tooltip: Use only the biome's declared background color; pure white when absent
+			Tooltip: Use only the biome's declared background color; pure white when absent (no sampling)
 		}
 
 		BackgroundColorSampling: {
