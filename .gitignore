@@ -1,15 +1,11 @@
-.dsh-edit-review-debug.log
-.dsh-edit-review.json
+# Agent Harness
 /.agents
-/.dsh-ops
-/.github/instructions
+docs/ai-log-archive.md
+
+# 工作区缓存
 /.vs
 /.vscode
 /bin
 /libs
 /obj
 /Properties
-BTitlesLocalizationPatch.slnx
-tModLoader
-/.workbuddy-ai
-docs/ai-log-archive.md
